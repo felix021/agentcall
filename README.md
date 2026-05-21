@@ -1,0 +1,111 @@
+# agentcall
+
+[English README](README.en.md)
+
+`agentcall` 用真实 PTY 启动终端型 agent，例如交互式 `claude`、交互式 `codex`，以及其他基于终端的 CLI agent，并通过本机 `localhost` HTTP callback 收集结构化停止态结果。
+
+runner 会先启动目标 TUI，再通过 PTY 注入一段包装后的任务 prompt，并额外发送一次 Enter，尽量模拟人类在终端里的操作。
+
+目标 agent 需要能在交互界面中接收这段注入的 prompt，并遵守 callback contract：向其中给出的 `localhost` URL 发送 JSON 回调，字段至少包括 `token`、`status`、`content_type`、`content`。
+
+## 能力
+
+- 保留真实终端交互行为，而不是走 `-p` 这类纯打印模式
+- 通过 PTY 注入 prompt，而不是依赖命令行 positional prompt
+- 输出结构化 JSON 结果，适合被上层 invoker 或 agent 编排
+- 支持保存 `status.json` 和 `transcript.log`
+- 支持 `--auto-trust`，自动确认已识别的 workspace trust 对话框一次
+
+## 基本用法
+
+```bash
+agentcall run \
+  --timeout 30s \
+  --prompt "review this diff" \
+  -- claude
+```
+
+## 常用参数
+
+- `--prompt`：要通过 PTY 注入给目标 agent 的任务文本
+- `--timeout`：单次运行超时，默认 `90s`
+- `--artifacts-dir`：结果和 transcript 的输出目录；不传时会自动创建临时目录，但路径不可预测
+- `--status-file`：显式指定状态 JSON 路径；不传时默认写到 `artifacts-dir/status.json`
+- `--auto-trust`：自动确认一次已识别的 trust prompt
+
+## Claude 示例
+
+```bash
+agentcall run \
+  --auto-trust \
+  --timeout 180s \
+  --prompt "Review the current diff and send the final result through the callback." \
+  -- claude --dangerously-skip-permissions
+```
+
+## Codex 示例
+
+```bash
+agentcall run \
+  --timeout 180s \
+  --prompt "Review the current diff and send the final result through the callback." \
+  -- codex --dangerously-bypass-approvals-and-sandbox
+```
+
+## 输出
+
+当 runner 成功启动目标 agent 后，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态，stdout 都会输出一条 JSON envelope。
+如果是参数错误、启动失败或 JSON 编码失败，CLI 会改为输出纯文本错误到 stderr，并返回 exit code `1`。
+
+runner 自身会把最终结果输出为一条 JSON，例如：
+
+```json
+{
+  "run_id": "latest",
+  "state": "callback_received",
+  "status": "ok",
+  "exit_code": 0,
+  "content_type": "text/plain",
+  "content": "done",
+  "error": ""
+}
+```
+
+callback 可接受的 `status`：
+
+- `ok`
+- `needs_input`
+- `error`
+- `refused`
+
+runner 还可能生成这些非 callback 终态：
+
+- `timed_out`
+- `callback_missing`
+
+## Exit Code
+
+- `0`：`ok`
+- `2`：`needs_input` 或 `refused`
+- `3`：`timed_out`
+- `4`：`callback_missing`
+- `1`：`error`，以及其他失败，例如参数错误、runner 启动失败、内部错误
+
+## Artifact
+
+当 runner 成功启动目标 agent，并且运行走到可收敛的终态时，会在 artifact 目录下写出：
+
+- `status.json`
+- `transcript.log`
+
+如果目标进程在启动前就失败，例如命令不存在，那么目录可能已经创建，但这两个文件不会出现。
+
+如果没有传 `--artifacts-dir`，runner 会创建一个临时目录，适合临时调试，但不适合让外部 invoker 依赖。
+如果需要稳定的最终结果路径：
+
+- 传 `--status-file` 获取可预测的最终状态 JSON 路径
+- 传 `--artifacts-dir` 获取可预测的 transcript / artifact 路径
+
+`status.json` 只会在运行结束时写出，不会在 `starting`、`running`、`active` 之类的中间状态持续刷新，所以它不是实时进度通道。
+
+其中 `transcript.log` 会包含终端输出，以及像 `auto-trust confirmed` 这样的 runner 注记，方便排查交互过程。
