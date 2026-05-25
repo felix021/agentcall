@@ -16,6 +16,35 @@ The target agent must be able to receive that injected prompt inside its interac
 - Can persist `status.json` and `transcript.log`
 - Supports `--auto-trust` to confirm a recognized workspace trust dialog once
 
+## Installation
+
+Each release archive includes both the executable and the skill file at `skills/agentcall/SKILL.md`.
+
+### Option 1: Download a prebuilt release
+
+1. Download the archive that matches your platform from GitHub Releases:
+   - Linux: `linux_amd64` or `linux_arm64`
+   - macOS: `darwin_amd64` or `darwin_arm64`
+   - Windows: `windows_amd64` or `windows_arm64`
+2. Extract it and place `agentcall` (`agentcall.exe` on Windows) somewhere on your `PATH`.
+3. Install the skill file for Codex:
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
+cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+```
+
+If you are on Windows without bash, copy the file manually to `%USERPROFILE%\.codex\skills\agentcall\SKILL.md`.
+
+### Option 2: Build from source
+
+```bash
+make build
+install -m 755 bin/agentcall ~/.local/bin/agentcall
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
+cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+```
+
 ## Basic Usage
 
 ```bash

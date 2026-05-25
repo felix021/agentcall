@@ -1,1 +1,7 @@
-.worktrees/
+/.worktrees/
+/bin/
+/dist/
+/agentcall
+/agentcall.exe
+/agentcall-dist
+/agentcall-dist.exe

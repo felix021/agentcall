@@ -16,6 +16,35 @@ runner 会先启动目标 TUI，再通过 PTY 注入一段包装后的任务 pro
 - 支持保存 `status.json` 和 `transcript.log`
 - 支持 `--auto-trust`，自动确认已识别的 workspace trust 对话框一次
 
+## 安装
+
+发布包里同时包含可执行文件和 skill 文件 `skills/agentcall/SKILL.md`。
+
+### 方式一：下载预编译发布包
+
+1. 从 GitHub Releases 下载与你的平台匹配的压缩包：
+   - Linux: `linux_amd64` 或 `linux_arm64`
+   - macOS: `darwin_amd64` 或 `darwin_arm64`
+   - Windows: `windows_amd64` 或 `windows_arm64`
+2. 解压后，把 `agentcall`（Windows 下为 `agentcall.exe`）放到 `PATH` 里的目录。
+3. 安装 skill 文件到 Codex：
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
+cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+```
+
+如果你在 Windows 上没有 bash，就手动复制到 `%USERPROFILE%\.codex\skills\agentcall\SKILL.md`。
+
+### 方式二：从源码构建
+
+```bash
+make build
+install -m 755 bin/agentcall ~/.local/bin/agentcall
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
+cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+```
+
 ## 基本用法
 
 ```bash
