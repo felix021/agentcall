@@ -11,7 +11,7 @@ func TestReadmesDocumentSkillInstallPathsForCodexAndClaude(t *testing.T) {
 
 	for _, path := range []string{"README.md", "README.en.md"} {
 		content := readFile(t, path)
-		assertContains(t, path, content, "~/.agent/skills/agentcall/SKILL.md")
+		assertContains(t, path, content, "~/.agents/skills/agentcall/SKILL.md")
 		assertContains(t, path, content, "~/.claude/skills/agentcall/SKILL.md")
 	}
 }
