@@ -35,19 +35,25 @@ const (
 )
 
 type OptionsInput struct {
-	Command      []string
-	Timeout      string
-	ArtifactsDir string
-	StatusFile   string
-	TailLines    int
-	AutoTrust    bool
+	Command            []string
+	Timeout            string
+	ArtifactsDir       string
+	StatusFile         string
+	TailLines          int
+	AutoTrust          bool
+	HeartbeatPeriod    time.Duration
+	HeartbeatPeriodSet bool
+	Verbose            int
+	VerboseSet         bool
 }
 
 type Options struct {
-	Command      []string
-	Timeout      time.Duration
-	ArtifactsDir string
-	StatusFile   string
-	TailLines    int
-	AutoTrust    bool
+	Command         []string
+	Timeout         time.Duration
+	ArtifactsDir    string
+	StatusFile      string
+	TailLines       int
+	AutoTrust       bool
+	HeartbeatPeriod time.Duration
+	Verbose         int
 }

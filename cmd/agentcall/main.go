@@ -7,12 +7,47 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/felix021/agentcall/internal/runner"
 )
 
 var runRunner = runner.Run
+
+type stringFlag struct {
+	value string
+	set   bool
+}
+
+func (f *stringFlag) String() string {
+	return f.value
+}
+
+func (f *stringFlag) Set(value string) error {
+	f.value = value
+	f.set = true
+	return nil
+}
+
+type intFlag struct {
+	value int
+	set   bool
+}
+
+func (f *intFlag) String() string {
+	return fmt.Sprintf("%d", f.value)
+}
+
+func (f *intFlag) Set(value string) error {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	f.value = parsed
+	f.set = true
+	return nil
+}
 
 func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
@@ -22,6 +57,10 @@ func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	statusFile := fs.String("status-file", "", "")
 	autoTrust := fs.Bool("auto-trust", false, "")
 	prompt := fs.String("prompt", "", "")
+	heartbeatPeriod := &stringFlag{value: time.Second.String()}
+	fs.Var(heartbeatPeriod, "heartbeat-period", "")
+	verbose := &intFlag{value: 1}
+	fs.Var(verbose, "verbose", "")
 	if err := fs.Parse(args); err != nil {
 		return runner.RunInput{}, err
 	}
@@ -35,13 +74,27 @@ func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	if parsedTimeout <= 0 {
 		return runner.RunInput{}, fmt.Errorf("timeout must be greater than zero")
 	}
+	parsedHeartbeatPeriod, err := time.ParseDuration(heartbeatPeriod.value)
+	if err != nil {
+		return runner.RunInput{}, err
+	}
+	if parsedHeartbeatPeriod <= 0 {
+		return runner.RunInput{}, fmt.Errorf("heartbeat-period must be greater than zero")
+	}
+	if verbose.value < 0 {
+		return runner.RunInput{}, fmt.Errorf("verbose must be greater than or equal to zero")
+	}
 	return runner.RunInput{
-		Command:      fs.Args(),
-		Prompt:       *prompt,
-		ArtifactsDir: *artifactsDir,
-		StatusFile:   *statusFile,
-		Timeout:      parsedTimeout,
-		AutoTrust:    *autoTrust,
+		Command:            fs.Args(),
+		Prompt:             *prompt,
+		ArtifactsDir:       *artifactsDir,
+		StatusFile:         *statusFile,
+		Timeout:            parsedTimeout,
+		AutoTrust:          *autoTrust,
+		HeartbeatPeriod:    parsedHeartbeatPeriod,
+		HeartbeatPeriodSet: heartbeatPeriod.set,
+		Verbose:            verbose.value,
+		VerboseSet:         verbose.set,
 	}, nil
 }
 

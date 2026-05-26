@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/felix021/agentcall/internal/runner"
 )
@@ -59,6 +60,70 @@ func TestParseRunArgsCarriesPromptWhenProvided(t *testing.T) {
 	}
 	if got.Prompt != "review this diff" {
 		t.Fatalf("Prompt = %q, want %q", got.Prompt, "review this diff")
+	}
+}
+
+func TestParseRunArgsAppliesDefaultHeartbeatSettings(t *testing.T) {
+	got, err := parseRunArgs([]string{"--", "claude"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	if got.HeartbeatPeriod != time.Second {
+		t.Fatalf("HeartbeatPeriod = %v, want %v", got.HeartbeatPeriod, time.Second)
+	}
+	if got.HeartbeatPeriodSet {
+		t.Fatal("HeartbeatPeriodSet = true, want false")
+	}
+	if got.Verbose != 1 {
+		t.Fatalf("Verbose = %d, want 1", got.Verbose)
+	}
+	if got.VerboseSet {
+		t.Fatal("VerboseSet = true, want false")
+	}
+}
+
+func TestParseRunArgsRejectsInvalidHeartbeatPeriod(t *testing.T) {
+	_, err := parseRunArgs([]string{"--heartbeat-period", "nope", "--", "claude"}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatalf("parseRunArgs() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "invalid duration") {
+		t.Fatalf("parseRunArgs() error = %v, want invalid duration", err)
+	}
+}
+
+func TestParseRunArgsRejectsNonPositiveHeartbeatPeriod(t *testing.T) {
+	for _, raw := range []string{"0s", "-1s"} {
+		_, err := parseRunArgs([]string{"--heartbeat-period", raw, "--", "claude"}, &bytes.Buffer{})
+		if err == nil {
+			t.Fatalf("parseRunArgs(%q) error = nil, want non-nil", raw)
+		}
+		if !strings.Contains(err.Error(), "heartbeat-period must be greater than zero") {
+			t.Fatalf("parseRunArgs(%q) error = %v, want heartbeat-period validation", raw, err)
+		}
+	}
+}
+
+func TestParseRunArgsCarriesExplicitVerboseLevel(t *testing.T) {
+	got, err := parseRunArgs([]string{"--verbose", "0", "--", "claude"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	if got.Verbose != 0 {
+		t.Fatalf("Verbose = %d, want 0", got.Verbose)
+	}
+	if !got.VerboseSet {
+		t.Fatal("VerboseSet = false, want true")
+	}
+}
+
+func TestParseRunArgsRejectsNegativeVerboseLevel(t *testing.T) {
+	_, err := parseRunArgs([]string{"--verbose", "-1", "--", "claude"}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatalf("parseRunArgs() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "verbose must be greater than or equal to zero") {
+		t.Fatalf("parseRunArgs() error = %v, want verbose validation", err)
 	}
 }
 

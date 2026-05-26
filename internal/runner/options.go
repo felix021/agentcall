@@ -39,13 +39,29 @@ func NewOptions(in OptionsInput) (Options, error) {
 	if tailLines <= 0 {
 		tailLines = 40
 	}
+	heartbeatPeriod := time.Second
+	if in.HeartbeatPeriodSet {
+		if in.HeartbeatPeriod < 0 {
+			return Options{}, fmt.Errorf("heartbeat period must be greater than or equal to zero")
+		}
+		heartbeatPeriod = in.HeartbeatPeriod
+	}
+	verbose := 1
+	if in.VerboseSet {
+		if in.Verbose < 0 {
+			return Options{}, fmt.Errorf("verbose must be greater than or equal to zero")
+		}
+		verbose = in.Verbose
+	}
 	return Options{
-		Command:      in.Command,
-		Timeout:      timeout,
-		ArtifactsDir: artifactsDir,
-		StatusFile:   statusFile,
-		TailLines:    tailLines,
-		AutoTrust:    in.AutoTrust,
+		Command:         in.Command,
+		Timeout:         timeout,
+		ArtifactsDir:    artifactsDir,
+		StatusFile:      statusFile,
+		TailLines:       tailLines,
+		AutoTrust:       in.AutoTrust,
+		HeartbeatPeriod: heartbeatPeriod,
+		Verbose:         verbose,
 	}, nil
 }
 

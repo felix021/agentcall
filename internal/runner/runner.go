@@ -14,12 +14,16 @@ import (
 )
 
 type RunInput struct {
-	Command      []string
-	Prompt       string
-	Timeout      time.Duration
-	ArtifactsDir string
-	StatusFile   string
-	AutoTrust    bool
+	Command            []string
+	Prompt             string
+	Timeout            time.Duration
+	ArtifactsDir       string
+	StatusFile         string
+	AutoTrust          bool
+	HeartbeatPeriod    time.Duration
+	HeartbeatPeriodSet bool
+	Verbose            int
+	VerboseSet         bool
 }
 
 type sessionWait struct {
@@ -30,13 +34,13 @@ type sessionWait struct {
 var randomTokenRead = rand.Read
 
 func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
-const (
-	promptIdleAfter     = 350 * time.Millisecond
-	promptFallbackAfter = 1500 * time.Millisecond
-	postTrustDelay      = 500 * time.Millisecond
-	promptSubmitFallback = 1500 * time.Millisecond
-	enterKey             = "\r"
-)
+	const (
+		promptIdleAfter      = 350 * time.Millisecond
+		promptFallbackAfter  = 1500 * time.Millisecond
+		postTrustDelay       = 500 * time.Millisecond
+		promptSubmitFallback = 1500 * time.Millisecond
+		enterKey             = "\r"
+	)
 
 	opts, err := resolveRunOptions(in)
 	if err != nil {
@@ -209,11 +213,15 @@ func resolveRunOptions(in RunInput) (Options, error) {
 	}
 
 	return NewOptions(OptionsInput{
-		Command:      append([]string{}, in.Command...),
-		Timeout:      timeout,
-		ArtifactsDir: in.ArtifactsDir,
-		StatusFile:   in.StatusFile,
-		AutoTrust:    in.AutoTrust,
+		Command:            append([]string{}, in.Command...),
+		Timeout:            timeout,
+		ArtifactsDir:       in.ArtifactsDir,
+		StatusFile:         in.StatusFile,
+		AutoTrust:          in.AutoTrust,
+		HeartbeatPeriod:    in.HeartbeatPeriod,
+		HeartbeatPeriodSet: in.HeartbeatPeriodSet,
+		Verbose:            in.Verbose,
+		VerboseSet:         in.VerboseSet,
 	})
 }
 

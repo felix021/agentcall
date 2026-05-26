@@ -3,6 +3,7 @@ package runner
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDefaultOptionsApplyArtifactsAndTailLines(t *testing.T) {
@@ -36,6 +37,40 @@ func TestDefaultOptionsApplyArtifactsAndTailLines(t *testing.T) {
 	}
 	if opts.AutoTrust {
 		t.Fatal("AutoTrust = true, want false by default")
+	}
+}
+
+func TestDefaultOptionsApplyHeartbeatSettings(t *testing.T) {
+	opts, err := NewOptions(OptionsInput{
+		Command: []string{"claude"},
+	})
+	if err != nil {
+		t.Fatalf("NewOptions() error = %v", err)
+	}
+	if opts.HeartbeatPeriod != time.Second {
+		t.Fatalf("HeartbeatPeriod = %v, want %v", opts.HeartbeatPeriod, time.Second)
+	}
+	if opts.Verbose != 1 {
+		t.Fatalf("Verbose = %d, want 1", opts.Verbose)
+	}
+}
+
+func TestNewOptionsPreservesExplicitHeartbeatDisable(t *testing.T) {
+	opts, err := NewOptions(OptionsInput{
+		Command:            []string{"claude"},
+		HeartbeatPeriod:    0,
+		HeartbeatPeriodSet: true,
+		Verbose:            0,
+		VerboseSet:         true,
+	})
+	if err != nil {
+		t.Fatalf("NewOptions() error = %v", err)
+	}
+	if opts.HeartbeatPeriod != 0 {
+		t.Fatalf("HeartbeatPeriod = %v, want 0", opts.HeartbeatPeriod)
+	}
+	if opts.Verbose != 0 {
+		t.Fatalf("Verbose = %d, want 0", opts.Verbose)
 	}
 }
 
