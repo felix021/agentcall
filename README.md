@@ -27,22 +27,24 @@ runner 会先启动目标 TUI，再通过 PTY 注入一段包装后的任务 pro
    - macOS: `darwin_amd64` 或 `darwin_arm64`
    - Windows: `windows_amd64` 或 `windows_arm64`
 2. 解压后，把 `agentcall`（Windows 下为 `agentcall.exe`）放到 `PATH` 里的目录。
-3. 安装 skill 文件到 Codex：
+3. 安装 skill 文件到 Codex 和 Claude：
 
 ```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
-cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
-如果你在 Windows 上没有 bash，就手动复制到 `%USERPROFILE%\.codex\skills\agentcall\SKILL.md`。
+如果你在 Windows 上没有 bash，就手动复制到 `%USERPROFILE%\.agent\skills\agentcall\SKILL.md`（Codex）和 `%USERPROFILE%\.claude\skills\agentcall\SKILL.md`（Claude）。
 
 ### 方式二：从源码构建
 
 ```bash
 make build
 install -m 755 bin/agentcall ~/.local/bin/agentcall
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
-cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
 ## 基本用法

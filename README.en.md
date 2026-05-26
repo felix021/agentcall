@@ -27,22 +27,24 @@ Each release archive includes both the executable and the skill file at `skills/
    - macOS: `darwin_amd64` or `darwin_arm64`
    - Windows: `windows_amd64` or `windows_arm64`
 2. Extract it and place `agentcall` (`agentcall.exe` on Windows) somewhere on your `PATH`.
-3. Install the skill file for Codex:
+3. Install the skill file for Codex and Claude:
 
 ```bash
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
-cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
-If you are on Windows without bash, copy the file manually to `%USERPROFILE%\.codex\skills\agentcall\SKILL.md`.
+If you are on Windows without bash, copy the file manually to `%USERPROFILE%\.agent\skills\agentcall\SKILL.md` for Codex and `%USERPROFILE%\.claude\skills\agentcall\SKILL.md` for Claude.
 
 ### Option 2: Build from source
 
 ```bash
 make build
 install -m 755 bin/agentcall ~/.local/bin/agentcall
-mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills/agentcall"
-cp skills/agentcall/SKILL.md "${CODEX_HOME:-$HOME/.codex}/skills/agentcall/SKILL.md"
+mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
 ## Basic Usage
