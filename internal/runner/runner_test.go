@@ -322,6 +322,68 @@ func TestDetectTrustPromptMatchesAnsiRenderedSafetyDialog(t *testing.T) {
 	}
 }
 
+func TestRefreshRunnerStateRecomputesAwaitingInputBeforeHeartbeatEmit(t *testing.T) {
+	now := time.Date(2026, time.May, 26, 12, 0, 0, 0, time.UTC)
+	detector := NewDetector(350*time.Millisecond, []string{"clarification", "continue?", "proceed?"})
+	detector.Observe("Need clarification about the target branch?", now.Add(-time.Second))
+
+	state, lastSnapshot, promptActivitySeen, screenChanged := refreshRunnerState(
+		"Need clarification about the target branch?",
+		now,
+		detector,
+		"Need clarification about the target branch?",
+		false,
+		false,
+		time.Time{},
+		false,
+		false,
+	)
+
+	if state != StatusAwaitingInput {
+		t.Fatalf("state = %q, want %q", state, StatusAwaitingInput)
+	}
+	if lastSnapshot != "Need clarification about the target branch?" {
+		t.Fatalf("lastSnapshot = %q, want unchanged snapshot", lastSnapshot)
+	}
+	if promptActivitySeen {
+		t.Fatal("promptActivitySeen = true, want false")
+	}
+	if screenChanged {
+		t.Fatal("screenChanged = true, want false for unchanged snapshot")
+	}
+}
+
+func TestRefreshRunnerStateMarksScreenChangedAndPromptActivityOnNewSnapshot(t *testing.T) {
+	now := time.Date(2026, time.May, 26, 12, 0, 0, 0, time.UTC)
+	promptPastedAt := now.Add(-2 * time.Second)
+	detector := NewDetector(350*time.Millisecond, []string{"clarification", "continue?", "proceed?"})
+
+	state, lastSnapshot, promptActivitySeen, screenChanged := refreshRunnerState(
+		"fakeagent: slow phase 1",
+		now,
+		detector,
+		"",
+		true,
+		false,
+		promptPastedAt,
+		false,
+		false,
+	)
+
+	if state != StatusActive {
+		t.Fatalf("state = %q, want %q", state, StatusActive)
+	}
+	if lastSnapshot != "fakeagent: slow phase 1" {
+		t.Fatalf("lastSnapshot = %q, want refreshed snapshot", lastSnapshot)
+	}
+	if !promptActivitySeen {
+		t.Fatal("promptActivitySeen = false, want true after post-paste output")
+	}
+	if !screenChanged {
+		t.Fatal("screenChanged = false, want true for changed snapshot")
+	}
+}
+
 func fakeAgentCommand(t *testing.T, mode string) []string {
 	t.Helper()
 

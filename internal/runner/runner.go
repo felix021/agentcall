@@ -145,6 +145,19 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 			return out, nil
 
 		case <-heartbeatTick.C:
+			snapshot := sess.Snapshot()
+			now := time.Now()
+			currentState, lastSnapshot, promptActivitySeen, screenChangedSinceHeartbeat = refreshRunnerState(
+				snapshot,
+				now,
+				detector,
+				lastSnapshot,
+				promptPasted,
+				promptSubmitted,
+				promptPastedAt,
+				promptActivitySeen,
+				screenChangedSinceHeartbeat,
+			)
 			heartbeatSeq++
 			_ = heartbeat.Emit(heartbeatSeq, currentState, HeartbeatDiagnostics{
 				ScreenChanged:   screenChangedSinceHeartbeat,
@@ -157,16 +170,17 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 		case <-controlTick.C:
 			snapshot := sess.Snapshot()
 			now := time.Now()
-
-			if snapshot != lastSnapshot {
-				detector.Observe(normalizeTerminalText(snapshot), now)
-				screenChangedSinceHeartbeat = true
-				if promptPasted && !promptSubmitted && now.After(promptPastedAt) {
-					promptActivitySeen = true
-				}
-				lastSnapshot = snapshot
-			}
-			currentState = detector.State(now)
+			currentState, lastSnapshot, promptActivitySeen, screenChangedSinceHeartbeat = refreshRunnerState(
+				snapshot,
+				now,
+				detector,
+				lastSnapshot,
+				promptPasted,
+				promptSubmitted,
+				promptPastedAt,
+				promptActivitySeen,
+				screenChangedSinceHeartbeat,
+			)
 
 			if !autoTrustSent && detectTrustPrompt(snapshot) {
 				if !opts.AutoTrust {
@@ -257,6 +271,33 @@ func drainWait(waitCh <-chan sessionWait, store *state.Store, timeout time.Durat
 		_ = store.AppendTranscript([]byte(wait.result.Transcript))
 	case <-timer.C:
 	}
+}
+
+func refreshRunnerState(
+	snapshot string,
+	now time.Time,
+	detector *Detector,
+	lastSnapshot string,
+	promptPasted bool,
+	promptSubmitted bool,
+	promptPastedAt time.Time,
+	promptActivitySeen bool,
+	screenChangedSinceHeartbeat bool,
+) (state string, updatedSnapshot string, updatedPromptActivitySeen bool, updatedScreenChanged bool) {
+	updatedSnapshot = lastSnapshot
+	updatedPromptActivitySeen = promptActivitySeen
+	updatedScreenChanged = screenChangedSinceHeartbeat
+
+	if snapshot != lastSnapshot {
+		detector.Observe(normalizeTerminalText(snapshot), now)
+		updatedSnapshot = snapshot
+		updatedScreenChanged = true
+		if promptPasted && !promptSubmitted && now.After(promptPastedAt) {
+			updatedPromptActivitySeen = true
+		}
+	}
+
+	return detector.State(now), updatedSnapshot, updatedPromptActivitySeen, updatedScreenChanged
 }
 
 func outcomeFromExit(_ sessionWait, results <-chan callback.Result) (ResultEnvelope, bool) {
