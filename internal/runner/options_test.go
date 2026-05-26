@@ -57,20 +57,34 @@ func TestDefaultOptionsApplyHeartbeatSettings(t *testing.T) {
 
 func TestNewOptionsPreservesExplicitHeartbeatDisable(t *testing.T) {
 	opts, err := NewOptions(OptionsInput{
-		Command:            []string{"claude"},
-		HeartbeatPeriod:    0,
-		HeartbeatPeriodSet: true,
-		Verbose:            0,
-		VerboseSet:         true,
+		Command:    []string{"claude"},
+		Verbose:    0,
+		VerboseSet: true,
 	})
 	if err != nil {
 		t.Fatalf("NewOptions() error = %v", err)
 	}
-	if opts.HeartbeatPeriod != 0 {
-		t.Fatalf("HeartbeatPeriod = %v, want 0", opts.HeartbeatPeriod)
+	if opts.HeartbeatPeriod != time.Second {
+		t.Fatalf("HeartbeatPeriod = %v, want %v", opts.HeartbeatPeriod, time.Second)
 	}
 	if opts.Verbose != 0 {
 		t.Fatalf("Verbose = %d, want 0", opts.Verbose)
+	}
+}
+
+func TestNewOptionsRejectsNonPositiveExplicitHeartbeatPeriod(t *testing.T) {
+	for _, period := range []time.Duration{0, -1 * time.Second} {
+		_, err := NewOptions(OptionsInput{
+			Command:            []string{"claude"},
+			HeartbeatPeriod:    period,
+			HeartbeatPeriodSet: true,
+		})
+		if err == nil {
+			t.Fatalf("NewOptions(%v) error = nil, want non-nil", period)
+		}
+		if err.Error() != "heartbeat period must be greater than zero" {
+			t.Fatalf("NewOptions(%v) error = %q, want %q", period, err.Error(), "heartbeat period must be greater than zero")
+		}
 	}
 }
 

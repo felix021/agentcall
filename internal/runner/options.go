@@ -41,8 +41,8 @@ func NewOptions(in OptionsInput) (Options, error) {
 	}
 	heartbeatPeriod := time.Second
 	if in.HeartbeatPeriodSet {
-		if in.HeartbeatPeriod < 0 {
-			return Options{}, fmt.Errorf("heartbeat period must be greater than or equal to zero")
+		if in.HeartbeatPeriod <= 0 {
+			return Options{}, fmt.Errorf("heartbeat period must be greater than zero")
 		}
 		heartbeatPeriod = in.HeartbeatPeriod
 	}

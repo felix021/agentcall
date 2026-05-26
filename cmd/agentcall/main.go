@@ -79,7 +79,7 @@ func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 		return runner.RunInput{}, err
 	}
 	if parsedHeartbeatPeriod <= 0 {
-		return runner.RunInput{}, fmt.Errorf("heartbeat-period must be greater than zero")
+		return runner.RunInput{}, fmt.Errorf("heartbeat period must be greater than zero")
 	}
 	if verbose.value < 0 {
 		return runner.RunInput{}, fmt.Errorf("verbose must be greater than or equal to zero")

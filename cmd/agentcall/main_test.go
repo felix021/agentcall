@@ -98,7 +98,7 @@ func TestParseRunArgsRejectsNonPositiveHeartbeatPeriod(t *testing.T) {
 		if err == nil {
 			t.Fatalf("parseRunArgs(%q) error = nil, want non-nil", raw)
 		}
-		if !strings.Contains(err.Error(), "heartbeat-period must be greater than zero") {
+		if !strings.Contains(err.Error(), "heartbeat period must be greater than zero") {
 			t.Fatalf("parseRunArgs(%q) error = %v, want heartbeat-period validation", raw, err)
 		}
 	}
