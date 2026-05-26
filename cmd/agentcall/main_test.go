@@ -82,6 +82,19 @@ func TestParseRunArgsAppliesDefaultHeartbeatSettings(t *testing.T) {
 	}
 }
 
+func TestParseRunArgsPreservesExplicitHeartbeatPeriod(t *testing.T) {
+	got, err := parseRunArgs([]string{"--heartbeat-period", "250ms", "--", "claude"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	if got.HeartbeatPeriod != 250*time.Millisecond {
+		t.Fatalf("HeartbeatPeriod = %v, want %v", got.HeartbeatPeriod, 250*time.Millisecond)
+	}
+	if !got.HeartbeatPeriodSet {
+		t.Fatal("HeartbeatPeriodSet = false, want true")
+	}
+}
+
 func TestParseRunArgsRejectsInvalidHeartbeatPeriod(t *testing.T) {
 	_, err := parseRunArgs([]string{"--heartbeat-period", "nope", "--", "claude"}, &bytes.Buffer{})
 	if err == nil {
