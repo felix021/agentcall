@@ -60,8 +60,8 @@ agentcall run \
 
 - `--prompt`：要通过 PTY 注入给目标 agent 的任务文本
 - `--timeout`：单次运行超时，默认 `90s`
-- `--heartbeat-period`：活跃运行期间向 `stderr` 输出 heartbeat JSON 的周期，默认 `1s`
-- `--verbose`：heartbeat 输出级别；`0` 关闭 heartbeat，`1` 输出基础 heartbeat 字段，`2` 额外输出诊断字段
+- `--heartbeat-period`：活跃运行保持足够久时，heartbeat JSON 向 `stderr` 输出的周期；默认 `1s`
+- `--verbose`：heartbeat 输出级别；`0` 完全关闭 heartbeat，`1` 在 heartbeat 实际触发时输出基础字段，`2` 在 heartbeat 实际触发时额外输出诊断字段
 - `--artifacts-dir`：结果和 transcript 的输出目录；不传时会自动创建临时目录，但路径不可预测
 - `--status-file`：显式指定状态 JSON 路径；不传时默认写到 `artifacts-dir/status.json`
 - `--auto-trust`：自动确认一次已识别的 trust prompt
@@ -87,7 +87,7 @@ agentcall run \
 
 ## 输出
 
-当 runner 成功启动目标 agent 后，默认会在整个活跃运行期间向 `stderr` 持续输出按行分隔的 heartbeat JSON；如果传 `--verbose=0`，则不会输出这些 heartbeat。`stdout` 始终保留给最终唯一一条结果 JSON envelope，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态。
+当 runner 成功启动目标 agent 后，如果活跃时间足够长，达到当前配置的 `--heartbeat-period`，默认会向 `stderr` 输出按行分隔的 heartbeat JSON；如果传 `--verbose=0`，则会完全抑制这些 heartbeat。`stdout` 始终保留给最终唯一一条结果 JSON envelope，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态。
 如果是参数错误、启动失败或 JSON 编码失败，CLI 会改为输出纯文本错误到 `stderr`，并返回 exit code `1`。
 
 heartbeat 行示例：

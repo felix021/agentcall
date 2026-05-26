@@ -16,6 +16,50 @@ func TestReadmesDocumentSkillInstallPathsForCodexAndClaude(t *testing.T) {
 	}
 }
 
+func TestReadmesDocumentHeartbeatAndStdIOSplitContract(t *testing.T) {
+	t.Parallel()
+
+	type readmeContract struct {
+		path  string
+		wants []string
+	}
+
+	for _, tc := range []readmeContract{
+		{
+			path: "README.md",
+			wants: []string{
+				"`--heartbeat-period`",
+				"`--verbose`",
+				"`--verbose=0`",
+				"活跃时间足够长",
+				"`stderr`",
+				"`stdout` 始终保留给最终唯一一条结果 JSON envelope",
+			},
+		},
+		{
+			path: "README.en.md",
+			wants: []string{
+				"`--heartbeat-period`",
+				"`--verbose`",
+				"`--verbose=0`",
+				"active long enough",
+				"`stderr`",
+				"`stdout` remains reserved for the single final-result JSON envelope",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			content := readFile(t, tc.path)
+			for _, want := range tc.wants {
+				assertContains(t, tc.path, content, want)
+			}
+		})
+	}
+}
+
 func TestSkillExplainsYoloFlagsForClaudeAndCodex(t *testing.T) {
 	t.Parallel()
 

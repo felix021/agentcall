@@ -60,8 +60,8 @@ agentcall run \
 
 - `--prompt`: task text injected into the target agent through the PTY
 - `--timeout`: per-run timeout, default `90s`
-- `--heartbeat-period`: interval for heartbeat JSON lines emitted to `stderr` while the run is active, default `1s`
-- `--verbose`: heartbeat output level; `0` disables heartbeats, `1` emits the base heartbeat fields, and `2` adds diagnostic fields
+- `--heartbeat-period`: interval for heartbeat JSON lines emitted to `stderr` once the run stays active long enough to reach a heartbeat tick, default `1s`
+- `--verbose`: heartbeat output level; `0` disables heartbeats entirely, `1` emits the base heartbeat fields when a heartbeat is actually emitted, and `2` adds diagnostic fields when a heartbeat is actually emitted
 - `--artifacts-dir`: output directory for result and transcript artifacts; if omitted, a temporary directory is created automatically
 - `--status-file`: explicit path for the status JSON; if omitted, it defaults to `artifacts-dir/status.json`
 - `--auto-trust`: auto-confirms one recognized trust prompt
@@ -87,7 +87,7 @@ agentcall run \
 
 ## Output
 
-Once the runner has successfully started the target agent, `stderr` emits newline-delimited heartbeat JSON for the duration of the active run by default; if you pass `--verbose=0`, those heartbeat lines are suppressed. `stdout` remains reserved for the single final-result JSON envelope covering both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
+Once the runner has successfully started the target agent, `stderr` may emit newline-delimited heartbeat JSON by default if the run remains active long enough to hit the configured `--heartbeat-period`; if you pass `--verbose=0`, those heartbeat lines are suppressed entirely. `stdout` remains reserved for the single final-result JSON envelope covering both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
 For argument errors, startup failures, or JSON encoding failures, the CLI writes plain-text errors to `stderr` and returns exit code `1` instead.
 
 Example heartbeat line:
