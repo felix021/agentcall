@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,8 +115,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Token == nil || req.Status == nil || req.ContentType == nil || req.Content == nil {
-		http.Error(w, "invalid payload", http.StatusBadRequest)
+	if missing := missingRequiredFields(req); len(missing) > 0 {
+		http.Error(w, fmt.Sprintf("invalid payload: missing required fields: %s", strings.Join(missing, ", ")), http.StatusBadRequest)
 		return
 	}
 
@@ -127,8 +128,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		Metadata:    req.Metadata,
 	}
 
-	if payload.Token == "" || payload.Status == "" || payload.ContentType == "" {
-		http.Error(w, "invalid payload", http.StatusBadRequest)
+	if empty := emptyRequiredFields(payload); len(empty) > 0 {
+		http.Error(w, fmt.Sprintf("invalid payload: empty required fields: %s", strings.Join(empty, ", ")), http.StatusBadRequest)
 		return
 	}
 	if _, ok := allowedStatuses[payload.Status]; !ok {
@@ -155,4 +156,35 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		Remote:  r.RemoteAddr,
 	}
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func missingRequiredFields(req callbackRequest) []string {
+	var fields []string
+	if req.Token == nil {
+		fields = append(fields, "token")
+	}
+	if req.Status == nil {
+		fields = append(fields, "status")
+	}
+	if req.ContentType == nil {
+		fields = append(fields, "content_type")
+	}
+	if req.Content == nil {
+		fields = append(fields, "content")
+	}
+	return fields
+}
+
+func emptyRequiredFields(payload sharedtypes.CallbackPayload) []string {
+	var fields []string
+	if payload.Token == "" {
+		fields = append(fields, "token")
+	}
+	if payload.Status == "" {
+		fields = append(fields, "status")
+	}
+	if payload.ContentType == "" {
+		fields = append(fields, "content_type")
+	}
+	return fields
 }

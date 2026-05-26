@@ -12,6 +12,7 @@ func TestBuildIncludesCallbackContract(t *testing.T) {
 		"tok-1",
 		"Always invoke the localhost callback when you stop making forward progress",
 		"Keep any terminal-side final summary brief because the callback payload is authoritative",
+		`{"token":"tok-1","status":"ok","content_type":"text/plain","content":"<final response text>"}`,
 		"needs_input",
 		"review this diff",
 	} {

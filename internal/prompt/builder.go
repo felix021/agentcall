@@ -4,7 +4,7 @@ import "fmt"
 
 func Build(callbackURL, token, userPrompt string) string {
 	return fmt.Sprintf(
-		"You are running inside a local PTY automation wrapper. Keep normal progress and reasoning in the terminal UI. Keep any terminal-side final summary brief because the callback payload is authoritative. Always invoke the localhost callback when you stop making forward progress for the current turn, including success, clarification needed, confirmation needed, refusal, or error. POST JSON to %s with token %s. Use statuses: ok, needs_input, error, refused. User task: %s",
+		`You are running inside a local PTY automation wrapper. Keep normal progress and reasoning in the terminal UI. Keep any terminal-side final summary brief because the callback payload is authoritative. Always invoke the localhost callback when you stop making forward progress for the current turn, including success, clarification needed, confirmation needed, refusal, or error. POST JSON to %s using exactly one JSON object with required fields like {"token":"%s","status":"ok","content_type":"text/plain","content":"<final response text>"}; replace the example values as needed for your result. Use statuses: ok, needs_input, error, refused. User task: %s`,
 		callbackURL,
 		token,
 		userPrompt,

@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +140,12 @@ func TestServerRejectsIncompletePayloadWithoutConsumingSlot(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("StatusCode = %d, want %d", resp.StatusCode, http.StatusBadRequest)
 	}
+	body := readBody(t, resp)
+	for _, needle := range []string{"missing required fields", "status", "content_type", "content"} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("response body = %q, want substring %q", body, needle)
+		}
+	}
 
 	good := []byte(`{"token":"token-4","status":"ok","content_type":"text/plain","content":"done"}`)
 	resp, err = http.Post(srv.URL()+"/callback", "application/json", bytes.NewReader(good))
@@ -229,4 +237,38 @@ func TestServerRejectsUnknownTopLevelFieldWithoutConsumingSlot(t *testing.T) {
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("StatusCode = %d, want %d", resp.StatusCode, http.StatusAccepted)
 	}
+}
+
+func TestServerRejectsEmptyRequiredFieldsWithFieldNames(t *testing.T) {
+	srv, err := NewServer("token-8", 10*time.Second)
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	defer srv.Close(context.Background())
+
+	resp, err := http.Post(srv.URL()+"/callback", "application/json", bytes.NewBufferString(`{"token":"token-8","status":"","content_type":"","content":"done"}`))
+	if err != nil {
+		t.Fatalf("http.Post() error = %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("StatusCode = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	body := readBody(t, resp)
+	for _, needle := range []string{"empty required fields", "status", "content_type"} {
+		if !strings.Contains(body, needle) {
+			t.Fatalf("response body = %q, want substring %q", body, needle)
+		}
+	}
+}
+
+func readBody(t *testing.T, resp *http.Response) string {
+	t.Helper()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("io.ReadAll() error = %v", err)
+	}
+
+	return string(body)
 }
