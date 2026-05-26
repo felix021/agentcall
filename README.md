@@ -87,7 +87,7 @@ agentcall run \
 
 ## 输出
 
-当 runner 成功启动目标 agent 后，在整个活跃运行期间，`stderr` 会持续输出按行分隔的 heartbeat JSON；`stdout` 始终保留给最终唯一一条结果 JSON envelope，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态。
+当 runner 成功启动目标 agent 后，默认会在整个活跃运行期间向 `stderr` 持续输出按行分隔的 heartbeat JSON；如果传 `--verbose=0`，则不会输出这些 heartbeat。`stdout` 始终保留给最终唯一一条结果 JSON envelope，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态。
 如果是参数错误、启动失败或 JSON 编码失败，CLI 会改为输出纯文本错误到 `stderr`，并返回 exit code `1`。
 
 heartbeat 行示例：

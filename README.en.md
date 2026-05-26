@@ -87,7 +87,7 @@ agentcall run \
 
 ## Output
 
-Once the runner has successfully started the target agent, `stderr` emits newline-delimited heartbeat JSON for the duration of the active run, while `stdout` remains reserved for the single final-result JSON envelope covering both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
+Once the runner has successfully started the target agent, `stderr` emits newline-delimited heartbeat JSON for the duration of the active run by default; if you pass `--verbose=0`, those heartbeat lines are suppressed. `stdout` remains reserved for the single final-result JSON envelope covering both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
 For argument errors, startup failures, or JSON encoding failures, the CLI writes plain-text errors to `stderr` and returns exit code `1` instead.
 
 Example heartbeat line:
