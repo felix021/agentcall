@@ -3,6 +3,7 @@ package runner
 import (
 	"encoding/json"
 	"io"
+	"reflect"
 	"time"
 )
 
@@ -36,12 +37,8 @@ type heartbeatVerbose struct {
 }
 
 func NewHeartbeatEmitter(writer io.Writer, verbose int) *HeartbeatEmitter {
-	if writer == nil {
-		writer = io.Discard
-	}
-
 	return &HeartbeatEmitter{
-		writer:  writer,
+		writer:  heartbeatWriter(writer),
 		verbose: verbose,
 		now:     time.Now,
 	}
@@ -52,10 +49,7 @@ func (e *HeartbeatEmitter) Emit(seq int, state string, diag HeartbeatDiagnostics
 		return nil
 	}
 
-	writer := e.writer
-	if writer == nil {
-		writer = io.Discard
-	}
+	writer := heartbeatWriter(e.writer)
 
 	now := time.Now
 	if e.now != nil {
@@ -89,4 +83,20 @@ func (e *HeartbeatEmitter) Emit(seq int, state string, diag HeartbeatDiagnostics
 
 	_, err = writer.Write(append(payload, '\n'))
 	return err
+}
+
+func heartbeatWriter(writer io.Writer) io.Writer {
+	if writer == nil {
+		return io.Discard
+	}
+
+	value := reflect.ValueOf(writer)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		if value.IsNil() {
+			return io.Discard
+		}
+	}
+
+	return writer
 }

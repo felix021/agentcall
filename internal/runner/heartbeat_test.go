@@ -77,8 +77,7 @@ func TestHeartbeatEmitterWritesBaseHeartbeatJSON(t *testing.T) {
 func TestHeartbeatEmitterIncludesVerboseTwoFields(t *testing.T) {
 	var buf bytes.Buffer
 
-	emitter := NewHeartbeatEmitter(nil, 2)
-	emitter.writer = &buf
+	emitter := NewHeartbeatEmitter(&buf, 2)
 	emitter.now = func() time.Time {
 		return time.Date(2026, time.May, 26, 12, 34, 56, 0, time.FixedZone("UTC+8", 8*60*60))
 	}
@@ -114,5 +113,26 @@ func TestHeartbeatEmitterIncludesVerboseTwoFields(t *testing.T) {
 	}
 	if got["prompt_submitted"] != false {
 		t.Fatalf("heartbeat[prompt_submitted] = %v, want false", got["prompt_submitted"])
+	}
+}
+
+func TestHeartbeatEmitterAcceptsNilWriters(t *testing.T) {
+	emitter := NewHeartbeatEmitter(nil, 2)
+	emitter.now = func() time.Time {
+		return time.Date(2026, time.May, 26, 12, 34, 56, 0, time.UTC)
+	}
+
+	if err := emitter.Emit(1, StatusRunning, HeartbeatDiagnostics{}); err != nil {
+		t.Fatalf("Emit() with nil writer error = %v", err)
+	}
+
+	var typedNilBuffer *bytes.Buffer
+	emitter = NewHeartbeatEmitter(typedNilBuffer, 2)
+	emitter.now = func() time.Time {
+		return time.Date(2026, time.May, 26, 12, 34, 57, 0, time.UTC)
+	}
+
+	if err := emitter.Emit(2, StatusRunning, HeartbeatDiagnostics{}); err != nil {
+		t.Fatalf("Emit() with typed-nil writer error = %v", err)
 	}
 }
