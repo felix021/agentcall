@@ -71,6 +71,15 @@ func main() {
 		fmt.Println("Prompt received")
 		fmt.Println("Finalizing result")
 		send(*callbackURL, *token, "ok", "done")
+	case "slow-success":
+		resolveCallbackContract(reader, callbackURL, token)
+		fmt.Println("Prompt received")
+		for i := 0; i < 4; i++ {
+			fmt.Printf("fakeagent: slow phase %d\r\n", i)
+			time.Sleep(120 * time.Millisecond)
+		}
+		fmt.Println("Finalizing result")
+		send(*callbackURL, *token, "ok", "done")
 	case "submit-then-success":
 		resolveCallbackContract(reader, callbackURL, token)
 		fmt.Println("Prompt received")

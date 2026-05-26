@@ -112,7 +112,7 @@ func runCLI(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return 1
 	}
-	res, err := runRunner(context.Background(), input)
+	res, err := runRunner(context.Background(), input, stderr)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

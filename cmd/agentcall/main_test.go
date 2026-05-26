@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -204,12 +205,21 @@ func TestRunCLIEmitsJSONAndExitCodeOnSuccess(t *testing.T) {
 		runRunner = origRunRunner
 	})
 
-	runRunner = func(_ context.Context, in runner.RunInput) (runner.ResultEnvelope, error) {
+	runRunner = func(_ context.Context, in runner.RunInput, stderr io.Writer) (runner.ResultEnvelope, error) {
+		if stderr == nil {
+			t.Fatal("stderr writer = nil, want non-nil")
+		}
 		if got, want := in.Command, []string{"claude"}; len(got) != len(want) || got[0] != want[0] {
 			t.Fatalf("run input command = %v, want %v", got, want)
 		}
 		if got, want := in.Prompt, "review this diff"; got != want {
 			t.Fatalf("run input prompt = %q, want %q", got, want)
+		}
+		if got, want := in.HeartbeatPeriod, 250*time.Millisecond; got != want {
+			t.Fatalf("HeartbeatPeriod = %v, want %v", got, want)
+		}
+		if got, want := in.Verbose, 2; got != want {
+			t.Fatalf("Verbose = %d, want %d", got, want)
 		}
 		return runner.ResultEnvelope{
 			RunID:    "latest",
@@ -223,7 +233,14 @@ func TestRunCLIEmitsJSONAndExitCodeOnSuccess(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	exitCode := runCLI([]string{"run", "--prompt", "review this diff", "--", "claude"}, &stdout, &stderr)
+	exitCode := runCLI([]string{
+		"run",
+		"--prompt", "review this diff",
+		"--heartbeat-period", "250ms",
+		"--verbose", "2",
+		"--",
+		"claude",
+	}, &stdout, &stderr)
 
 	if exitCode != 2 {
 		t.Fatalf("runCLI() exitCode = %d, want 2", exitCode)
@@ -247,7 +264,7 @@ func TestRunCLIReturnsErrorWhenJSONWriteFails(t *testing.T) {
 		runRunner = origRunRunner
 	})
 
-	runRunner = func(_ context.Context, _ runner.RunInput) (runner.ResultEnvelope, error) {
+	runRunner = func(_ context.Context, _ runner.RunInput, _ io.Writer) (runner.ResultEnvelope, error) {
 		return runner.ResultEnvelope{
 			RunID:    "latest",
 			State:    runner.StatusCallbackRecv,

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/felix021/agentcall/internal/callback"
@@ -33,8 +34,9 @@ type sessionWait struct {
 
 var randomTokenRead = rand.Read
 
-func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
+func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, error) {
 	const (
+		controlTickPeriod    = 200 * time.Millisecond
 		promptIdleAfter      = 350 * time.Millisecond
 		promptFallbackAfter  = 1500 * time.Millisecond
 		postTrustDelay       = 500 * time.Millisecond
@@ -82,8 +84,11 @@ func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
 
 	timer := time.NewTimer(opts.Timeout)
 	defer timer.Stop()
-	tick := time.NewTicker(200 * time.Millisecond)
-	defer tick.Stop()
+	controlTick := time.NewTicker(controlTickPeriod)
+	defer controlTick.Stop()
+	heartbeatTick := time.NewTicker(opts.HeartbeatPeriod)
+	defer heartbeatTick.Stop()
+	heartbeat := NewHeartbeatEmitter(stderr, opts.Verbose)
 
 	startedAt := time.Now()
 	promptReadyAt := startedAt
@@ -94,6 +99,9 @@ func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
 	promptActivitySeen := false
 	lastSnapshot := ""
 	detector := NewDetector(promptIdleAfter, []string{"clarification", "continue?", "proceed?"})
+	currentState := StatusRunning
+	screenChangedSinceHeartbeat := false
+	heartbeatSeq := 0
 	for {
 		select {
 		case got := <-srv.Results():
@@ -136,17 +144,29 @@ func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
 			_ = store.WriteStatus(out)
 			return out, nil
 
-		case <-tick.C:
+		case <-heartbeatTick.C:
+			heartbeatSeq++
+			_ = heartbeat.Emit(heartbeatSeq, currentState, HeartbeatDiagnostics{
+				ScreenChanged:   screenChangedSinceHeartbeat,
+				AutoTrustSent:   autoTrustSent,
+				PromptPasted:    promptPasted,
+				PromptSubmitted: promptSubmitted,
+			})
+			screenChangedSinceHeartbeat = false
+
+		case <-controlTick.C:
 			snapshot := sess.Snapshot()
 			now := time.Now()
 
 			if snapshot != lastSnapshot {
 				detector.Observe(normalizeTerminalText(snapshot), now)
+				screenChangedSinceHeartbeat = true
 				if promptPasted && !promptSubmitted && now.After(promptPastedAt) {
 					promptActivitySeen = true
 				}
 				lastSnapshot = snapshot
 			}
+			currentState = detector.State(now)
 
 			if !autoTrustSent && detectTrustPrompt(snapshot) {
 				if !opts.AutoTrust {
@@ -162,8 +182,7 @@ func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
 			}
 
 			if promptPasted && !promptSubmitted {
-				state := detector.State(now)
-				ready := promptActivitySeen && (state == StatusIdle || state == StatusAwaitingInput)
+				ready := promptActivitySeen && (currentState == StatusIdle || currentState == StatusAwaitingInput)
 				if !ready && now.Sub(promptPastedAt) < promptSubmitFallback {
 					continue
 				}
@@ -178,8 +197,7 @@ func Run(ctx context.Context, in RunInput) (ResultEnvelope, error) {
 				continue
 			}
 
-			state := detector.State(now)
-			ready := state == StatusIdle || state == StatusAwaitingInput
+			ready := currentState == StatusIdle || currentState == StatusAwaitingInput
 			if !ready && now.Sub(startedAt) < promptFallbackAfter {
 				continue
 			}

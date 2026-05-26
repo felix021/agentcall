@@ -1,8 +1,11 @@
 package runner
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,7 +40,7 @@ func TestRunReturnsSuccessEnvelopeFromCallback(t *testing.T) {
 		Command: fakeAgentCommand(t, "success"),
 		Prompt:  "review this diff",
 		Timeout: 5 * time.Second,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -54,7 +57,7 @@ func TestRunReturnsNeedsInputEnvelope(t *testing.T) {
 		Command: fakeAgentCommand(t, "needs-input"),
 		Prompt:  "review this diff",
 		Timeout: 5 * time.Second,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -71,7 +74,7 @@ func TestRunMarksCallbackMissingWhenProcessExitsWithoutPayload(t *testing.T) {
 		Command: fakeAgentCommand(t, "no-callback"),
 		Prompt:  "review this diff",
 		Timeout: 2 * time.Second,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -88,7 +91,7 @@ func TestRunReturnsTimedOutEnvelopeWhenProcessBlocks(t *testing.T) {
 		Command: []string{"sh", "-c", "sleep 10"},
 		Prompt:  "review this diff",
 		Timeout: 500 * time.Millisecond,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -112,7 +115,7 @@ func TestRunAutoTrustConfirmsRecognizedPrompt(t *testing.T) {
 		ArtifactsDir: artifactsDir,
 		StatusFile:   filepath.Join(artifactsDir, "status.json"),
 		AutoTrust:    true,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -137,7 +140,7 @@ func TestRunLeavesTrustPromptBlockedWithoutAutoTrust(t *testing.T) {
 		Command: fakeAgentCommand(t, "trust-then-success"),
 		Prompt:  "review this diff",
 		Timeout: 750 * time.Millisecond,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
@@ -154,12 +157,95 @@ func TestRunSubmitsPromptAfterInjection(t *testing.T) {
 		Command: fakeAgentCommand(t, "submit-then-success"),
 		Prompt:  "review this diff",
 		Timeout: 5 * time.Second,
-	})
+	}, io.Discard)
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
 	if res.Status != "ok" || res.ExitCode != 0 {
 		t.Fatalf("result = %+v", res)
+	}
+}
+
+func TestRunEmitsHeartbeatJSONToStderr(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stderr bytes.Buffer
+	res, err := Run(ctx, RunInput{
+		Command:            fakeAgentCommand(t, "slow-success"),
+		Prompt:             "review this diff",
+		Timeout:            5 * time.Second,
+		HeartbeatPeriod:    100 * time.Millisecond,
+		HeartbeatPeriodSet: true,
+		Verbose:            1,
+		VerboseSet:         true,
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.Status != "ok" {
+		t.Fatalf("result = %+v", res)
+	}
+	lines := decodeHeartbeatLines(t, stderr.Bytes())
+	if len(lines) < 2 {
+		t.Fatalf("heartbeat count = %d, want at least 2", len(lines))
+	}
+	for _, line := range lines {
+		if line["type"] != "heartbeat" {
+			t.Fatalf("heartbeat = %#v", line)
+		}
+	}
+}
+
+func TestRunSuppressesHeartbeatWhenVerboseZero(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stderr bytes.Buffer
+	_, err := Run(ctx, RunInput{
+		Command:            fakeAgentCommand(t, "slow-success"),
+		Prompt:             "review this diff",
+		Timeout:            5 * time.Second,
+		HeartbeatPeriod:    100 * time.Millisecond,
+		HeartbeatPeriodSet: true,
+		Verbose:            0,
+		VerboseSet:         true,
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("stderr = %q, want empty", stderr.String())
+	}
+}
+
+func TestRunVerboseTwoIncludesDiagnosticHeartbeatFields(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	var stderr bytes.Buffer
+	_, err := Run(ctx, RunInput{
+		Command:            fakeAgentCommand(t, "slow-success"),
+		Prompt:             "review this diff",
+		Timeout:            5 * time.Second,
+		HeartbeatPeriod:    100 * time.Millisecond,
+		HeartbeatPeriodSet: true,
+		Verbose:            2,
+		VerboseSet:         true,
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	lines := decodeHeartbeatLines(t, stderr.Bytes())
+	foundVerboseField := false
+	for _, line := range lines {
+		if _, ok := line["prompt_pasted"]; ok {
+			foundVerboseField = true
+			break
+		}
+	}
+	if !foundVerboseField {
+		t.Fatalf("heartbeat lines = %#v, want verbose diagnostic fields", lines)
 	}
 }
 
@@ -251,4 +337,23 @@ func fakeAgentCommand(t *testing.T, mode string) []string {
 
 	repoRoot := filepath.Dir(filepath.Dir(filepath.Dir(file)))
 	return []string{goBin, "run", filepath.Join(repoRoot, "internal", "fakeagent"), "--mode", mode}
+}
+
+func decodeHeartbeatLines(t *testing.T, raw []byte) []map[string]any {
+	t.Helper()
+
+	raw = bytes.TrimSpace(raw)
+	if len(raw) == 0 {
+		return nil
+	}
+
+	var out []map[string]any
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		var decoded map[string]any
+		if err := json.Unmarshal(line, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal(%q) error = %v", string(line), err)
+		}
+		out = append(out, decoded)
+	}
+	return out
 }
