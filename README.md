@@ -30,20 +30,20 @@ runner 会先启动目标 TUI，再通过 PTY 注入一段包装后的任务 pro
 3. 安装 skill 文件到 Codex 和 Claude：
 
 ```bash
-mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
-cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+mkdir -p ~/.agents/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agents/skills/agentcall/SKILL.md
 cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
-如果你在 Windows 上没有 bash，就手动复制到 `%USERPROFILE%\.agent\skills\agentcall\SKILL.md`（Codex）和 `%USERPROFILE%\.claude\skills\agentcall\SKILL.md`（Claude）。
+如果你在 Windows 上没有 bash，就手动复制到 `%USERPROFILE%\.agents\skills\agentcall\SKILL.md`（Codex）和 `%USERPROFILE%\.claude\skills\agentcall\SKILL.md`（Claude）。
 
 ### 方式二：从源码构建
 
 ```bash
 make build
 install -m 755 bin/agentcall ~/.local/bin/agentcall
-mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
-cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+mkdir -p ~/.agents/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agents/skills/agentcall/SKILL.md
 cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
@@ -60,6 +60,8 @@ agentcall run \
 
 - `--prompt`：要通过 PTY 注入给目标 agent 的任务文本
 - `--timeout`：单次运行超时，默认 `90s`
+- `--heartbeat-period`：活跃运行期间向 `stderr` 输出 heartbeat JSON 的周期，默认 `1s`
+- `--verbose`：heartbeat 输出级别；`0` 关闭 heartbeat，`1` 输出基础 heartbeat 字段，`2` 额外输出诊断字段
 - `--artifacts-dir`：结果和 transcript 的输出目录；不传时会自动创建临时目录，但路径不可预测
 - `--status-file`：显式指定状态 JSON 路径；不传时默认写到 `artifacts-dir/status.json`
 - `--auto-trust`：自动确认一次已识别的 trust prompt
@@ -85,8 +87,14 @@ agentcall run \
 
 ## 输出
 
-当 runner 成功启动目标 agent 后，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态，stdout 都会输出一条 JSON envelope。
-如果是参数错误、启动失败或 JSON 编码失败，CLI 会改为输出纯文本错误到 stderr，并返回 exit code `1`。
+当 runner 成功启动目标 agent 后，在整个活跃运行期间，`stderr` 会持续输出按行分隔的 heartbeat JSON；`stdout` 始终保留给最终唯一一条结果 JSON envelope，不论最终是收到 callback，还是走到 `timed_out` / `callback_missing` 这类 runner 终态。
+如果是参数错误、启动失败或 JSON 编码失败，CLI 会改为输出纯文本错误到 `stderr`，并返回 exit code `1`。
+
+heartbeat 行示例：
+
+```json
+{"type":"heartbeat","run_id":"latest","seq":7,"timestamp":"2026-05-26T12:34:56Z","state":"active"}
+```
 
 runner 自身会把最终结果输出为一条 JSON，例如：
 

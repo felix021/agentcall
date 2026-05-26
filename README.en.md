@@ -30,20 +30,20 @@ Each release archive includes both the executable and the skill file at `skills/
 3. Install the skill file for Codex and Claude:
 
 ```bash
-mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
-cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+mkdir -p ~/.agents/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agents/skills/agentcall/SKILL.md
 cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
-If you are on Windows without bash, copy the file manually to `%USERPROFILE%\.agent\skills\agentcall\SKILL.md` for Codex and `%USERPROFILE%\.claude\skills\agentcall\SKILL.md` for Claude.
+If you are on Windows without bash, copy the file manually to `%USERPROFILE%\.agents\skills\agentcall\SKILL.md` for Codex and `%USERPROFILE%\.claude\skills\agentcall\SKILL.md` for Claude.
 
 ### Option 2: Build from source
 
 ```bash
 make build
 install -m 755 bin/agentcall ~/.local/bin/agentcall
-mkdir -p ~/.agent/skills/agentcall ~/.claude/skills/agentcall
-cp skills/agentcall/SKILL.md ~/.agent/skills/agentcall/SKILL.md
+mkdir -p ~/.agents/skills/agentcall ~/.claude/skills/agentcall
+cp skills/agentcall/SKILL.md ~/.agents/skills/agentcall/SKILL.md
 cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 ```
 
@@ -60,6 +60,8 @@ agentcall run \
 
 - `--prompt`: task text injected into the target agent through the PTY
 - `--timeout`: per-run timeout, default `90s`
+- `--heartbeat-period`: interval for heartbeat JSON lines emitted to `stderr` while the run is active, default `1s`
+- `--verbose`: heartbeat output level; `0` disables heartbeats, `1` emits the base heartbeat fields, and `2` adds diagnostic fields
 - `--artifacts-dir`: output directory for result and transcript artifacts; if omitted, a temporary directory is created automatically
 - `--status-file`: explicit path for the status JSON; if omitted, it defaults to `artifacts-dir/status.json`
 - `--auto-trust`: auto-confirms one recognized trust prompt
@@ -85,8 +87,14 @@ agentcall run \
 
 ## Output
 
-Once the runner has successfully started the target agent, stdout contains a single JSON envelope for both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
-For argument errors, startup failures, or JSON encoding failures, the CLI writes plain-text errors to stderr and returns exit code `1` instead.
+Once the runner has successfully started the target agent, `stderr` emits newline-delimited heartbeat JSON for the duration of the active run, while `stdout` remains reserved for the single final-result JSON envelope covering both callback results and runner-generated terminal outcomes such as `timed_out` or `callback_missing`.
+For argument errors, startup failures, or JSON encoding failures, the CLI writes plain-text errors to `stderr` and returns exit code `1` instead.
+
+Example heartbeat line:
+
+```json
+{"type":"heartbeat","run_id":"latest","seq":7,"timestamp":"2026-05-26T12:34:56Z","state":"active"}
+```
 
 The runner prints the final result as a single JSON object, for example:
 
