@@ -34,7 +34,7 @@ Add a `stderr` heartbeat emitter owned by the runner loop. The emitter writes on
 This approach is preferred because it:
 
 - keeps `stdout` fully backward compatible
-- reuses the existing runner tick loop and state detector
+- reuses the existing runner state detector without slowing its control loop
 - provides a stable monitor channel without requiring file polling
 - makes heartbeat frequency and verbosity explicit CLI contract rather than hard-coded behavior
 
@@ -102,13 +102,15 @@ These extra fields are intentionally limited to runner-owned booleans that are a
 
 ## Data Flow
 
-The runner loop already executes on a periodic ticker. The heartbeat feature layers onto that flow as follows:
+The runner already has a fast control loop used for timeout checks and state derivation. The heartbeat feature layers onto that flow with a separate cadence ticker so liveness reporting can be slower or faster without changing the control loop:
 
 1. Parse the new CLI flags into `runner.RunInput`.
 2. Resolve validated defaults in runner options.
 3. Construct a `HeartbeatEmitter` bound to the provided `stderr` writer.
-4. On every tick, after the detector state is updated, emit a heartbeat event if verbosity is greater than zero.
-5. Continue writing the final terminal envelope only to `stdout`.
+4. Keep the existing `200ms` control ticker for process supervision and state updates.
+5. Start a separate heartbeat ticker only when verbosity is greater than zero.
+6. On every heartbeat tick, refresh the derived runner state from the latest snapshot and emit one heartbeat event.
+7. Continue writing the final terminal envelope only to `stdout`.
 
 The heartbeat stream stops as soon as the run reaches any terminal outcome:
 
@@ -138,7 +140,9 @@ No final heartbeat is required after terminal outcome because the existing stdou
 
 - accept the heartbeat settings and `stderr` writer
 - create a heartbeat emitter once per run
-- emit a heartbeat on every tick before terminal-state checks continue the loop
+- keep the control ticker for supervision and state detection
+- use a second ticker for heartbeat cadence, disabled entirely when `--verbose=0`
+- emit a heartbeat on each heartbeat tick after refreshing the derived state
 
 The emission path must never break a run. If encoding a heartbeat fails, the runner should ignore that write failure and continue toward the final result.
 
