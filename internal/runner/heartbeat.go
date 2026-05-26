@@ -15,7 +15,7 @@ type HeartbeatDiagnostics struct {
 }
 
 type HeartbeatEmitter struct {
-	writer  io.Writer
+	write   func([]byte) (int, error)
 	verbose int
 	now     func() time.Time
 }
@@ -38,7 +38,7 @@ type heartbeatVerbose struct {
 
 func NewHeartbeatEmitter(writer io.Writer, verbose int) *HeartbeatEmitter {
 	return &HeartbeatEmitter{
-		writer:  heartbeatWriter(writer),
+		write:   heartbeatWriteFunc(writer),
 		verbose: verbose,
 		now:     time.Now,
 	}
@@ -49,11 +49,13 @@ func (e *HeartbeatEmitter) Emit(seq int, state string, diag HeartbeatDiagnostics
 		return nil
 	}
 
-	writer := heartbeatWriter(e.writer)
-
-	now := time.Now
-	if e.now != nil {
-		now = e.now
+	write := e.write
+	if write == nil {
+		write = io.Discard.Write
+	}
+	now := e.now
+	if now == nil {
+		now = time.Now
 	}
 
 	base := heartbeatBase{
@@ -81,8 +83,13 @@ func (e *HeartbeatEmitter) Emit(seq int, state string, diag HeartbeatDiagnostics
 		return err
 	}
 
-	_, err = writer.Write(append(payload, '\n'))
+	_, err = write(append(payload, '\n'))
 	return err
+}
+
+func heartbeatWriteFunc(writer io.Writer) func([]byte) (int, error) {
+	writer = heartbeatWriter(writer)
+	return writer.Write
 }
 
 func heartbeatWriter(writer io.Writer) io.Writer {

@@ -136,3 +136,16 @@ func TestHeartbeatEmitterAcceptsNilWriters(t *testing.T) {
 		t.Fatalf("Emit() with typed-nil writer error = %v", err)
 	}
 }
+
+func TestNewHeartbeatEmitterNormalizesNilWritersAtConstruction(t *testing.T) {
+	emitter := NewHeartbeatEmitter(nil, 1)
+	if emitter.write == nil {
+		t.Fatal("write = nil, want bound discard writer")
+	}
+
+	var typedNilBuffer *bytes.Buffer
+	emitter = NewHeartbeatEmitter(typedNilBuffer, 1)
+	if emitter.write == nil {
+		t.Fatal("typed-nil write = nil, want bound discard writer")
+	}
+}

@@ -86,9 +86,13 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 	defer timer.Stop()
 	controlTick := time.NewTicker(controlTickPeriod)
 	defer controlTick.Stop()
-	heartbeatTick := time.NewTicker(opts.HeartbeatPeriod)
-	defer heartbeatTick.Stop()
+	var heartbeatCh <-chan time.Time
 	heartbeat := NewHeartbeatEmitter(stderr, opts.Verbose)
+	if opts.Verbose > 0 {
+		heartbeatTick := time.NewTicker(opts.HeartbeatPeriod)
+		defer heartbeatTick.Stop()
+		heartbeatCh = heartbeatTick.C
+	}
 
 	startedAt := time.Now()
 	promptReadyAt := startedAt
@@ -144,7 +148,7 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 			_ = store.WriteStatus(out)
 			return out, nil
 
-		case <-heartbeatTick.C:
+		case <-heartbeatCh:
 			snapshot := sess.Snapshot()
 			now := time.Now()
 			currentState, lastSnapshot, promptActivitySeen, screenChangedSinceHeartbeat = refreshRunnerState(
