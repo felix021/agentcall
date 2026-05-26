@@ -74,9 +74,9 @@ func main() {
 	case "slow-success":
 		resolveCallbackContract(reader, callbackURL, token)
 		fmt.Println("Prompt received")
-		for i := 0; i < 4; i++ {
+		for i := 0; i < 12; i++ {
 			fmt.Printf("fakeagent: slow phase %d\r\n", i)
-			time.Sleep(120 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		fmt.Println("Finalizing result")
 		send(*callbackURL, *token, "ok", "done")

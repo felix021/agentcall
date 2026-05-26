@@ -187,8 +187,8 @@ func TestRunEmitsHeartbeatJSONToStderr(t *testing.T) {
 		t.Fatalf("result = %+v", res)
 	}
 	lines := decodeHeartbeatLines(t, stderr.Bytes())
-	if len(lines) < 2 {
-		t.Fatalf("heartbeat count = %d, want at least 2", len(lines))
+	if len(lines) < 30 {
+		t.Fatalf("heartbeat count = %d, want at least 30 for a deterministic multi-tick window", len(lines))
 	}
 	for _, line := range lines {
 		if line["type"] != "heartbeat" {
