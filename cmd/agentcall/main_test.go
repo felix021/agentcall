@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,7 +24,25 @@ func (w errWriter) Write(_ []byte) (int, error) {
 	return 0, w.err
 }
 
+func writeConfig(t *testing.T, content string) {
+	t.Helper()
+	configDir := filepath.Join(t.TempDir(), ".config", "agentcall")
+	t.Setenv("HOME", filepath.Dir(filepath.Dir(configDir)))
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(content), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+}
+
+func setHomeToTempDir(t *testing.T) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+}
+
 func TestParseRunArgsRequiresCommand(t *testing.T) {
+	setHomeToTempDir(t)
 	_, err := parseRunArgs([]string{"--timeout", "5s"}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatalf("parseRunArgs() error = nil, want non-nil")
@@ -29,6 +50,7 @@ func TestParseRunArgsRequiresCommand(t *testing.T) {
 }
 
 func TestParseRunArgsRejectsInvalidTimeout(t *testing.T) {
+	setHomeToTempDir(t)
 	_, err := parseRunArgs([]string{"--timeout", "nope", "--", "claude"}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatalf("parseRunArgs() error = nil, want non-nil")
@@ -36,6 +58,7 @@ func TestParseRunArgsRejectsInvalidTimeout(t *testing.T) {
 }
 
 func TestParseRunArgsRejectsNonPositiveTimeout(t *testing.T) {
+	setHomeToTempDir(t)
 	for _, raw := range []string{"0s", "-5s"} {
 		_, err := parseRunArgs([]string{"--timeout", raw, "--", "claude"}, &bytes.Buffer{})
 		if err == nil {
@@ -45,6 +68,7 @@ func TestParseRunArgsRejectsNonPositiveTimeout(t *testing.T) {
 }
 
 func TestParseRunArgsEnablesAutoTrustWhenRequested(t *testing.T) {
+	setHomeToTempDir(t)
 	got, err := parseRunArgs([]string{"--auto-trust", "--", "claude"}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
@@ -55,6 +79,7 @@ func TestParseRunArgsEnablesAutoTrustWhenRequested(t *testing.T) {
 }
 
 func TestParseRunArgsCarriesPromptWhenProvided(t *testing.T) {
+	setHomeToTempDir(t)
 	got, err := parseRunArgs([]string{"--prompt", "review this diff", "--", "claude"}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
@@ -64,7 +89,69 @@ func TestParseRunArgsCarriesPromptWhenProvided(t *testing.T) {
 	}
 }
 
+func TestParseRunArgsInjectsConfiguredClaudeModel(t *testing.T) {
+	writeConfig(t, "tools:\n  claude:\n    default_model: claude-opus-4-6\n")
+
+	got, err := parseRunArgs([]string{"--", "claude"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	want := []string{"claude", "--model", "claude-opus-4-6"}
+	if !reflect.DeepEqual(got.Command, want) {
+		t.Fatalf("Command = %v, want %v", got.Command, want)
+	}
+}
+
+func TestParseRunArgsInjectsConfiguredCodexModel(t *testing.T) {
+	writeConfig(t, "tools:\n  codex:\n    default_model: gpt-5.4\n")
+
+	got, err := parseRunArgs([]string{"--", "codex"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	want := []string{"codex", "-m", "gpt-5.4"}
+	if !reflect.DeepEqual(got.Command, want) {
+		t.Fatalf("Command = %v, want %v", got.Command, want)
+	}
+}
+
+func TestParseRunArgsKeepsExplicitClaudeModel(t *testing.T) {
+	writeConfig(t, "tools:\n  claude:\n    default_model: claude-opus-4-6\n")
+
+	got, err := parseRunArgs([]string{"--", "claude", "--model", "cli-model"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	want := []string{"claude", "--model", "cli-model"}
+	if !reflect.DeepEqual(got.Command, want) {
+		t.Fatalf("Command = %v, want %v", got.Command, want)
+	}
+}
+
+func TestParseRunArgsIgnoresMissingConfigFile(t *testing.T) {
+	setHomeToTempDir(t)
+
+	got, err := parseRunArgs([]string{"--", "claude"}, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("parseRunArgs() error = %v", err)
+	}
+	want := []string{"claude"}
+	if !reflect.DeepEqual(got.Command, want) {
+		t.Fatalf("Command = %v, want %v", got.Command, want)
+	}
+}
+
+func TestParseRunArgsRejectsInvalidConfigYAML(t *testing.T) {
+	writeConfig(t, "tools: [\n")
+
+	_, err := parseRunArgs([]string{"--", "claude"}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("parseRunArgs() error = nil, want non-nil")
+	}
+}
+
 func TestParseRunArgsAppliesDefaultHeartbeatSettings(t *testing.T) {
+	setHomeToTempDir(t)
 	got, err := parseRunArgs([]string{"--", "claude"}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
@@ -87,6 +174,7 @@ func TestParseRunArgsAppliesDefaultHeartbeatSettings(t *testing.T) {
 }
 
 func TestParseRunArgsPreservesExplicitHeartbeatPeriod(t *testing.T) {
+	setHomeToTempDir(t)
 	got, err := parseRunArgs([]string{"--heartbeat-period", "250ms", "--", "claude"}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
@@ -100,6 +188,7 @@ func TestParseRunArgsPreservesExplicitHeartbeatPeriod(t *testing.T) {
 }
 
 func TestParseRunArgsRejectsInvalidHeartbeatPeriod(t *testing.T) {
+	setHomeToTempDir(t)
 	_, err := parseRunArgs([]string{"--heartbeat-period", "nope", "--", "claude"}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatalf("parseRunArgs() error = nil, want non-nil")
@@ -110,6 +199,7 @@ func TestParseRunArgsRejectsInvalidHeartbeatPeriod(t *testing.T) {
 }
 
 func TestParseRunArgsRejectsNonPositiveHeartbeatPeriod(t *testing.T) {
+	setHomeToTempDir(t)
 	for _, raw := range []string{"0s", "-1s"} {
 		_, err := parseRunArgs([]string{"--heartbeat-period", raw, "--", "claude"}, &bytes.Buffer{})
 		if err == nil {
@@ -122,6 +212,7 @@ func TestParseRunArgsRejectsNonPositiveHeartbeatPeriod(t *testing.T) {
 }
 
 func TestParseRunArgsCarriesExplicitVerboseLevel(t *testing.T) {
+	setHomeToTempDir(t)
 	got, err := parseRunArgs([]string{"--verbose", "0", "--", "claude"}, &bytes.Buffer{})
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
@@ -135,6 +226,7 @@ func TestParseRunArgsCarriesExplicitVerboseLevel(t *testing.T) {
 }
 
 func TestParseRunArgsRejectsNegativeVerboseLevel(t *testing.T) {
+	setHomeToTempDir(t)
 	_, err := parseRunArgs([]string{"--verbose", "-1", "--", "claude"}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatalf("parseRunArgs() error = nil, want non-nil")
@@ -145,6 +237,7 @@ func TestParseRunArgsRejectsNegativeVerboseLevel(t *testing.T) {
 }
 
 func TestRunCLIReportsInvalidTimeout(t *testing.T) {
+	setHomeToTempDir(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -168,6 +261,7 @@ func TestRunCLIUsageWhenSubcommandMissingOrWrong(t *testing.T) {
 	}
 
 	for _, args := range tests {
+		setHomeToTempDir(t)
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 
@@ -186,6 +280,7 @@ func TestRunCLIUsageWhenSubcommandMissingOrWrong(t *testing.T) {
 }
 
 func TestRunCLIReportsFlagParseErrorsToProvidedStderr(t *testing.T) {
+	setHomeToTempDir(t)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
@@ -203,6 +298,7 @@ func TestRunCLIReportsFlagParseErrorsToProvidedStderr(t *testing.T) {
 }
 
 func TestRunCLIEmitsJSONAndExitCodeOnSuccess(t *testing.T) {
+	setHomeToTempDir(t)
 	origRunRunner := runRunner
 	t.Cleanup(func() {
 		runRunner = origRunRunner
@@ -262,6 +358,7 @@ func TestRunCLIEmitsJSONAndExitCodeOnSuccess(t *testing.T) {
 }
 
 func TestRunCLIReturnsErrorWhenJSONWriteFails(t *testing.T) {
+	setHomeToTempDir(t)
 	origRunRunner := runRunner
 	t.Cleanup(func() {
 		runRunner = origRunRunner

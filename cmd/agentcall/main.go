@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/felix021/agentcall/internal/config"
 	"github.com/felix021/agentcall/internal/runner"
 )
 
@@ -67,6 +68,10 @@ func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	if fs.NArg() == 0 {
 		return runner.RunInput{}, fmt.Errorf("command required")
 	}
+	cfg, err := config.Load()
+	if err != nil {
+		return runner.RunInput{}, err
+	}
 	parsedTimeout, err := time.ParseDuration(*timeout)
 	if err != nil {
 		return runner.RunInput{}, err
@@ -84,8 +89,9 @@ func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	if verbose.value < 0 {
 		return runner.RunInput{}, fmt.Errorf("verbose must be greater than or equal to zero")
 	}
+	command := config.ApplyDefaultModel(cfg, fs.Args())
 	return runner.RunInput{
-		Command:            fs.Args(),
+		Command:            command,
 		Prompt:             *prompt,
 		ArtifactsDir:       *artifactsDir,
 		StatusFile:         *statusFile,

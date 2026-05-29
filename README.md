@@ -73,6 +73,18 @@ agentcall run \
 
 对应的关键 flag 分别是 `--dangerously-skip-permissions` 和 `--dangerously-bypass-approvals-and-sandbox`。
 
+`agentcall` 也会尝试读取 `~/.config/agentcall/config.yaml` 里的可选默认配置。当前支持按工具配置默认模型；只有当命令行里没有显式传 model 参数时才会注入。例如：
+
+```yaml
+tools:
+  claude:
+    default_model: claude-opus-4-6
+  codex:
+    default_model: gpt-5.4
+```
+
+其中 `claude` 会补 `--model <value>`，`codex` 会补 `-m <value>`；如果命令行已经显式传了对应 model 参数，则以命令行为准。
+
 否则它们可能在命令审批或权限确认上阻塞。现在 `agentcall` 检测到这类确认提示时会直接报错退出，把线索写进 `error` 和 `status.json`，而不是静默卡到超时。
 
 对于 Codex 启动阶段出现的更新提示，如果界面提供 `Skip` 选项，`agentcall` 会自动切到 `Skip` 并继续运行；如果自动选择后更新对话框仍然停留在 screen snapshot 里，runner 会返回 `startup_blocked`。

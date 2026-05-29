@@ -73,6 +73,18 @@ For non-interactive `claude` / `codex` runs, the default recommendation is to us
 
 The critical flags are `--dangerously-skip-permissions` and `--dangerously-bypass-approvals-and-sandbox`.
 
+`agentcall` also tries to read optional defaults from `~/.config/agentcall/config.yaml`. It currently supports per-tool default models and only injects them when the CLI command did not already specify a model flag. For example:
+
+```yaml
+tools:
+  claude:
+    default_model: claude-opus-4-6
+  codex:
+    default_model: gpt-5.4
+```
+
+For `claude`, `agentcall` appends `--model <value>` when missing. For `codex`, it appends `-m <value>` when missing. If the CLI already includes an explicit model flag, the CLI value wins.
+
 Without those flags the target agent may block on approval or permission prompts. `agentcall` now fails fast when it detects those prompts, and surfaces the clue in `error` and `status.json` instead of only timing out.
 
 For Codex startup update dialogs that offer a `Skip` option, `agentcall` now moves selection to `Skip` automatically and continues. If the update dialog remains visible in subsequent screen snapshots, the runner returns `startup_blocked`.
