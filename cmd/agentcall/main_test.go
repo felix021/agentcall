@@ -69,6 +69,9 @@ func TestParseRunArgsAppliesDefaultHeartbeatSettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parseRunArgs() error = %v", err)
 	}
+	if got.Timeout != 600*time.Second {
+		t.Fatalf("Timeout = %v, want %v", got.Timeout, 600*time.Second)
+	}
 	if got.HeartbeatPeriod != time.Second {
 		t.Fatalf("HeartbeatPeriod = %v, want %v", got.HeartbeatPeriod, time.Second)
 	}

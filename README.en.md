@@ -13,7 +13,7 @@ The target agent must be able to receive that injected prompt inside its interac
 - Preserves real terminal interaction instead of relying on print-only modes such as `-p`
 - Injects the task prompt through the PTY instead of relying on positional prompt arguments
 - Emits structured JSON results for higher-level invokers and agents
-- Can persist `status.json` and `transcript.log`
+- Can persist `status.json`, the raw `transcript.log`, and a clean plain-text `transcript.txt`
 - Supports `--auto-trust` to confirm a recognized workspace trust dialog once
 
 ## Installation
@@ -51,20 +51,31 @@ cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 
 ```bash
 agentcall run \
-  --timeout 30s \
+  --timeout 600s \
   --prompt "review this diff" \
-  -- claude
+  -- claude --dangerously-skip-permissions
 ```
 
 ## Common Flags
 
 - `--prompt`: task text injected into the target agent through the PTY
-- `--timeout`: per-run timeout, default `90s`
+- `--timeout`: per-run timeout, default `600s`; larger tasks often need more time, so callers should raise it explicitly based on task complexity
 - `--heartbeat-period`: interval for heartbeat JSON lines emitted to `stderr` once the run stays active long enough to reach a heartbeat tick, default `1s`
 - `--verbose`: heartbeat output level; `0` disables heartbeats entirely, `1` emits the base heartbeat fields when a heartbeat is actually emitted, and `2` adds diagnostic fields when a heartbeat is actually emitted
 - `--artifacts-dir`: output directory for result and transcript artifacts; if omitted, a temporary directory is created automatically
 - `--status-file`: explicit path for the status JSON; if omitted, it defaults to `artifacts-dir/status.json`
 - `--auto-trust`: auto-confirms one recognized trust prompt
+
+For non-interactive `claude` / `codex` runs, the default recommendation is to use the target CLI in yolo mode:
+
+- `claude --dangerously-skip-permissions`
+- `codex --dangerously-bypass-approvals-and-sandbox`
+
+The critical flags are `--dangerously-skip-permissions` and `--dangerously-bypass-approvals-and-sandbox`.
+
+Without those flags the target agent may block on approval or permission prompts. `agentcall` now fails fast when it detects those prompts, and surfaces the clue in `error` and `status.json` instead of only timing out.
+
+For Codex startup update dialogs that offer a `Skip` option, `agentcall` now moves selection to `Skip` automatically and continues. If the update dialog remains visible in subsequent screen snapshots, the runner returns `startup_blocked`.
 
 ## Claude Example
 
@@ -119,6 +130,9 @@ Callback-accepted `status` values:
 
 The runner may also emit these non-callback terminal outcomes:
 
+- `startup_blocked`
+- `approval_required`
+- `restart_required`
 - `timed_out`
 - `callback_missing`
 
@@ -136,6 +150,7 @@ When the runner successfully starts the target agent and reaches a terminal outc
 
 - `status.json`
 - `transcript.log`
+- `transcript.txt`
 
 If the target process fails before startup completes, for example because the command does not exist, the directory may exist while these files do not.
 
@@ -147,4 +162,4 @@ If you need predictable final-result paths:
 
 `status.json` is written only at the end of a run. It does not continuously publish intermediate states such as `starting`, `running`, or `active`, so it should not be treated as a live progress channel.
 
-`transcript.log` contains terminal output plus runner annotations such as `auto-trust confirmed`, which helps debug interaction flow.
+`transcript.log` keeps the raw terminal output plus runner annotations such as `auto-trust confirmed`. `transcript.txt` removes ANSI control sequences, spinner noise, and repeated headings so callers can read the key plain text directly.

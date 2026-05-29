@@ -60,6 +60,84 @@ func TestReadmesDocumentHeartbeatAndStdIOSplitContract(t *testing.T) {
 	}
 }
 
+func TestReadmesRecommendYoloAndLongerDefaultTimeout(t *testing.T) {
+	t.Parallel()
+
+	type readmeContract struct {
+		path  string
+		wants []string
+	}
+
+	for _, tc := range []readmeContract{
+		{
+			path: "README.md",
+			wants: []string{
+				"默认 `600s`",
+				"大任务",
+				"`--dangerously-skip-permissions`",
+				"`--dangerously-bypass-approvals-and-sandbox`",
+				"默认推荐",
+			},
+		},
+		{
+			path: "README.en.md",
+			wants: []string{
+				"default `600s`",
+				"larger tasks",
+				"`--dangerously-skip-permissions`",
+				"`--dangerously-bypass-approvals-and-sandbox`",
+				"default recommendation",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			content := readFile(t, tc.path)
+			for _, want := range tc.wants {
+				assertContains(t, tc.path, content, want)
+			}
+		})
+	}
+}
+
+func TestReadmesDocumentCodexStartupUpdateHandling(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		path  string
+		wants []string
+	}{
+		{
+			path: "README.md",
+			wants: []string{
+				"`startup_blocked`",
+				"`Skip`",
+				"Codex 启动阶段出现的更新提示",
+			},
+		},
+		{
+			path: "README.en.md",
+			wants: []string{
+				"`startup_blocked`",
+				"`Skip`",
+				"Codex startup update dialogs",
+			},
+		},
+	} {
+		tc := tc
+		t.Run(tc.path, func(t *testing.T) {
+			t.Parallel()
+
+			content := readFile(t, tc.path)
+			for _, want := range tc.wants {
+				assertContains(t, tc.path, content, want)
+			}
+		})
+	}
+}
+
 func TestSkillExplainsYoloFlagsForClaudeAndCodex(t *testing.T) {
 	t.Parallel()
 
@@ -67,6 +145,9 @@ func TestSkillExplainsYoloFlagsForClaudeAndCodex(t *testing.T) {
 	assertContains(t, "skills/agentcall/SKILL.md", content, "yolo")
 	assertContains(t, "skills/agentcall/SKILL.md", content, "--dangerously-skip-permissions")
 	assertContains(t, "skills/agentcall/SKILL.md", content, "--dangerously-bypass-approvals-and-sandbox")
+	assertContains(t, "skills/agentcall/SKILL.md", content, "default recommendation")
+	assertContains(t, "skills/agentcall/SKILL.md", content, "600s")
+	assertContains(t, "skills/agentcall/SKILL.md", content, "startup_blocked")
 }
 
 func TestSkillDocumentsWorktreeAndEnvironmentContext(t *testing.T) {

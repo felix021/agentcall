@@ -13,7 +13,7 @@ runner 会先启动目标 TUI，再通过 PTY 注入一段包装后的任务 pro
 - 保留真实终端交互行为，而不是走 `-p` 这类纯打印模式
 - 通过 PTY 注入 prompt，而不是依赖命令行 positional prompt
 - 输出结构化 JSON 结果，适合被上层 invoker 或 agent 编排
-- 支持保存 `status.json` 和 `transcript.log`
+- 支持保存 `status.json`、原始 `transcript.log`，以及去 ANSI 的纯文本 `transcript.txt`
 - 支持 `--auto-trust`，自动确认已识别的 workspace trust 对话框一次
 
 ## 安装
@@ -51,20 +51,31 @@ cp skills/agentcall/SKILL.md ~/.claude/skills/agentcall/SKILL.md
 
 ```bash
 agentcall run \
-  --timeout 30s \
+  --timeout 600s \
   --prompt "review this diff" \
-  -- claude
+  -- claude --dangerously-skip-permissions
 ```
 
 ## 常用参数
 
 - `--prompt`：要通过 PTY 注入给目标 agent 的任务文本
-- `--timeout`：单次运行超时，默认 `90s`
+- `--timeout`：单次运行超时，默认 `600s`；大任务通常需要更长时间，应由 caller 按复杂度显式调大
 - `--heartbeat-period`：活跃运行保持足够久时，heartbeat JSON 向 `stderr` 输出的周期；默认 `1s`
 - `--verbose`：heartbeat 输出级别；`0` 完全关闭 heartbeat，`1` 在 heartbeat 实际触发时输出基础字段，`2` 在 heartbeat 实际触发时额外输出诊断字段
 - `--artifacts-dir`：结果和 transcript 的输出目录；不传时会自动创建临时目录，但路径不可预测
 - `--status-file`：显式指定状态 JSON 路径；不传时默认写到 `artifacts-dir/status.json`
 - `--auto-trust`：自动确认一次已识别的 trust prompt
+
+对 `claude` / `codex` 的非交互调用，默认推荐直接使用 yolo 参数：
+
+- `claude --dangerously-skip-permissions`
+- `codex --dangerously-bypass-approvals-and-sandbox`
+
+对应的关键 flag 分别是 `--dangerously-skip-permissions` 和 `--dangerously-bypass-approvals-and-sandbox`。
+
+否则它们可能在命令审批或权限确认上阻塞。现在 `agentcall` 检测到这类确认提示时会直接报错退出，把线索写进 `error` 和 `status.json`，而不是静默卡到超时。
+
+对于 Codex 启动阶段出现的更新提示，如果界面提供 `Skip` 选项，`agentcall` 会自动切到 `Skip` 并继续运行；如果自动选择后更新对话框仍然停留在 screen snapshot 里，runner 会返回 `startup_blocked`。
 
 ## Claude 示例
 
@@ -119,6 +130,9 @@ callback 可接受的 `status`：
 
 runner 还可能生成这些非 callback 终态：
 
+- `startup_blocked`
+- `approval_required`
+- `restart_required`
 - `timed_out`
 - `callback_missing`
 
@@ -136,6 +150,7 @@ runner 还可能生成这些非 callback 终态：
 
 - `status.json`
 - `transcript.log`
+- `transcript.txt`
 
 如果目标进程在启动前就失败，例如命令不存在，那么目录可能已经创建，但这两个文件不会出现。
 
@@ -147,4 +162,4 @@ runner 还可能生成这些非 callback 终态：
 
 `status.json` 只会在运行结束时写出，不会在 `starting`、`running`、`active` 之类的中间状态持续刷新，所以它不是实时进度通道。
 
-其中 `transcript.log` 会包含终端输出，以及像 `auto-trust confirmed` 这样的 runner 注记，方便排查交互过程。
+其中 `transcript.log` 会保留原始终端输出和 runner 注记，例如 `auto-trust confirmed`；`transcript.txt` 会去掉 ANSI 控制序列、spinner 和重复标题，便于上层 caller 直接读取关键明文。

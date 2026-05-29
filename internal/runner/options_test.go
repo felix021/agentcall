@@ -9,7 +9,7 @@ import (
 func TestDefaultOptionsApplyArtifactsAndTailLines(t *testing.T) {
 	opts, err := NewOptions(OptionsInput{
 		Command:      []string{"claude"},
-		Timeout:      "90s",
+		Timeout:      "600s",
 		ArtifactsDir: "",
 		StatusFile:   "",
 		TailLines:    0,
@@ -38,6 +38,9 @@ func TestDefaultOptionsApplyArtifactsAndTailLines(t *testing.T) {
 	if opts.AutoTrust {
 		t.Fatal("AutoTrust = true, want false by default")
 	}
+	if opts.Timeout != 600*time.Second {
+		t.Fatalf("Timeout = %v, want %v", opts.Timeout, 600*time.Second)
+	}
 }
 
 func TestDefaultOptionsApplyHeartbeatSettings(t *testing.T) {
@@ -52,6 +55,9 @@ func TestDefaultOptionsApplyHeartbeatSettings(t *testing.T) {
 	}
 	if opts.Verbose != 1 {
 		t.Fatalf("Verbose = %d, want 1", opts.Verbose)
+	}
+	if opts.Timeout != 600*time.Second {
+		t.Fatalf("Timeout = %v, want %v", opts.Timeout, 600*time.Second)
 	}
 }
 

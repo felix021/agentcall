@@ -7,16 +7,19 @@ import (
 )
 
 const (
-	StatusStarting        = "starting"
-	StatusRunning         = "running"
-	StatusActive          = "active"
-	StatusIdle            = "idle"
-	StatusAwaitingInput   = "awaiting_input"
-	StatusCallbackRecv    = "callback_received"
-	StatusExited          = "exited"
-	StatusTimedOut        = "timed_out"
-	StatusFailed          = "failed"
-	StatusCallbackMissing = "callback_missing"
+	StatusStarting         = "starting"
+	StatusRunning          = "running"
+	StatusActive           = "active"
+	StatusIdle             = "idle"
+	StatusAwaitingInput    = "awaiting_input"
+	StatusCallbackRecv     = "callback_received"
+	StatusExited           = "exited"
+	StatusTimedOut         = "timed_out"
+	StatusFailed           = "failed"
+	StatusStartupBlocked   = "startup_blocked"
+	StatusApprovalRequired = "approval_required"
+	StatusRestartRequired  = "restart_required"
+	StatusCallbackMissing  = "callback_missing"
 )
 
 type CallbackPayload = sharedtypes.CallbackPayload

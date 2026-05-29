@@ -11,7 +11,7 @@ func NewOptions(in OptionsInput) (Options, error) {
 	if len(in.Command) == 0 {
 		return Options{}, fmt.Errorf("command required")
 	}
-	timeout := 90 * time.Second
+	timeout := 600 * time.Second
 	if in.Timeout != "" {
 		d, err := time.ParseDuration(in.Timeout)
 		if err != nil {

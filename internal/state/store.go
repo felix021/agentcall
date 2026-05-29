@@ -12,6 +12,7 @@ type Store struct {
 	artifactsDir string
 	statusPath   string
 	transcript   string
+	cleanText    string
 }
 
 func NewStore(artifactsDir, statusPath string) (*Store, error) {
@@ -25,6 +26,7 @@ func NewStore(artifactsDir, statusPath string) (*Store, error) {
 		artifactsDir: artifactsDir,
 		statusPath:   statusPath,
 		transcript:   filepath.Join(artifactsDir, "transcript.log"),
+		cleanText:    filepath.Join(artifactsDir, "transcript.txt"),
 	}, nil
 }
 
@@ -41,6 +43,10 @@ func (s *Store) AppendTranscript(data []byte) error {
 	}
 	_, err = f.Write(data)
 	return err
+}
+
+func (s *Store) WriteCleanTranscript(text string) error {
+	return os.WriteFile(s.cleanText, []byte(text), 0o600)
 }
 
 func (s *Store) WriteStatus(status sharedtypes.ResultEnvelope) error {

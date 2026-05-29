@@ -53,6 +53,42 @@ func TestRunReturnsSuccessEnvelopeFromCallback(t *testing.T) {
 	}
 }
 
+func TestRunPersistsTranscriptsWhenCallbackArrivesBeforeChildExit(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommand(t, "success-delayed-exit"),
+		Prompt:       "review this diff",
+		Timeout:      fakeAgentRunTimeout,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.Status != "ok" || res.ExitCode != 0 {
+		t.Fatalf("result = %+v", res)
+	}
+
+	rawTranscript, err := os.ReadFile(filepath.Join(artifactsDir, "transcript.log"))
+	if err != nil {
+		t.Fatalf("ReadFile(transcript.log) error = %v", err)
+	}
+	if !strings.Contains(string(rawTranscript), "Prompt received") {
+		t.Fatalf("transcript.log missing session output: %q", string(rawTranscript))
+	}
+
+	cleanTranscript, err := os.ReadFile(filepath.Join(artifactsDir, "transcript.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(transcript.txt) error = %v", err)
+	}
+	if !strings.Contains(string(cleanTranscript), "Prompt received") {
+		t.Fatalf("transcript.txt missing session output: %q", string(cleanTranscript))
+	}
+}
+
 func TestRunReturnsNeedsInputEnvelope(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
 	defer cancel()
@@ -150,6 +186,140 @@ func TestRunLeavesTrustPromptBlockedWithoutAutoTrust(t *testing.T) {
 	}
 	if res.Status != "timed_out" || res.ExitCode != 3 {
 		t.Fatalf("result = %+v", res)
+	}
+}
+
+func TestRunFailsFastOnCodexApprovalPromptWithoutYolo(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommandAsTool(t, "approval-block", "codex"),
+		Prompt:       "review this diff",
+		Timeout:      fakeAgentRunTimeout,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.State != "approval_required" || res.Status != "error" || res.ExitCode != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	if !strings.Contains(res.Error, "--dangerously-bypass-approvals-and-sandbox") {
+		t.Fatalf("error = %q, want yolo guidance", res.Error)
+	}
+	if !strings.Contains(res.Error, "Action Required") {
+		t.Fatalf("error = %q, want prompt hint", res.Error)
+	}
+
+	statusRaw, err := os.ReadFile(filepath.Join(artifactsDir, "status.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(status.json) error = %v", err)
+	}
+	var status ResultEnvelope
+	if err := json.Unmarshal(statusRaw, &status); err != nil {
+		t.Fatalf("json.Unmarshal(status.json) error = %v", err)
+	}
+	if status.State != "approval_required" || !strings.Contains(status.Error, "Action Required") {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestRunClassifiesCodexRestartPromptBeforeCallbackMissing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommandAsTool(t, "self-update-exit", "codex"),
+		Prompt:       "review this diff",
+		Timeout:      fakeAgentRunTimeout,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.State != "restart_required" || res.Status != "error" || res.ExitCode != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	if !strings.Contains(res.Error, "Please restart Codex.") {
+		t.Fatalf("error = %q, want restart hint", res.Error)
+	}
+	if strings.Contains(res.Error, "callback") {
+		t.Fatalf("error = %q, should not collapse to callback_missing", res.Error)
+	}
+
+	cleanTranscript, err := os.ReadFile(filepath.Join(artifactsDir, "transcript.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(transcript.txt) error = %v", err)
+	}
+	if strings.Contains(string(cleanTranscript), "\x1b[") {
+		t.Fatalf("clean transcript still contains ANSI: %q", string(cleanTranscript))
+	}
+	if !strings.Contains(string(cleanTranscript), "Please restart Codex.") {
+		t.Fatalf("clean transcript missing restart text: %q", string(cleanTranscript))
+	}
+}
+
+func TestRunSkipsCodexStartupUpdatePromptAndContinues(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommandAsTool(t, "startup-update-skip-then-success", "codex"),
+		Prompt:       "review this diff",
+		Timeout:      fakeAgentRunTimeout,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.Status != "ok" || res.ExitCode != 0 {
+		t.Fatalf("result = %+v", res)
+	}
+
+	transcript, err := os.ReadFile(filepath.Join(artifactsDir, "transcript.log"))
+	if err != nil {
+		t.Fatalf("ReadFile(transcript.log) error = %v", err)
+	}
+	if !strings.Contains(string(transcript), "auto-skipped codex update prompt") {
+		t.Fatalf("transcript missing codex update skip marker: %q", string(transcript))
+	}
+
+	cleanTranscript, err := os.ReadFile(filepath.Join(artifactsDir, "transcript.txt"))
+	if err != nil {
+		t.Fatalf("ReadFile(transcript.txt) error = %v", err)
+	}
+	if !strings.Contains(string(cleanTranscript), "Skip selected") {
+		t.Fatalf("transcript.txt missing skip confirmation: %q", string(cleanTranscript))
+	}
+}
+
+func TestRunFailsWhenCodexUpdatePromptPersistsAfterAutoSkip(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommandAsTool(t, "startup-update-stuck-after-skip", "codex"),
+		Prompt:       "review this diff",
+		Timeout:      fakeAgentRunTimeout,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.State != "startup_blocked" || res.Status != "error" || res.ExitCode != 1 {
+		t.Fatalf("result = %+v", res)
+	}
+	if !strings.Contains(res.Error, "Codex update prompt remained visible after auto-skip") {
+		t.Fatalf("error = %q, want stuck-update message", res.Error)
 	}
 }
 
@@ -256,6 +426,41 @@ func TestRunSuppressesHeartbeatWhenVerboseZero(t *testing.T) {
 	}
 }
 
+func TestRunTimedOutErrorIncludesTranscriptHintAndWritesStatus(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
+	defer cancel()
+
+	artifactsDir := t.TempDir()
+	res, err := Run(ctx, RunInput{
+		Command:      fakeAgentCommand(t, "timeout-hint"),
+		Prompt:       "review this diff",
+		Timeout:      4 * time.Second,
+		ArtifactsDir: artifactsDir,
+		StatusFile:   filepath.Join(artifactsDir, "status.json"),
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if res.Status != "timed_out" || res.ExitCode != 3 {
+		t.Fatalf("result = %+v", res)
+	}
+	if !strings.Contains(res.Error, "Need human confirmation before continuing.") {
+		t.Fatalf("error = %q, want transcript hint", res.Error)
+	}
+
+	statusRaw, err := os.ReadFile(filepath.Join(artifactsDir, "status.json"))
+	if err != nil {
+		t.Fatalf("ReadFile(status.json) error = %v", err)
+	}
+	var status ResultEnvelope
+	if err := json.Unmarshal(statusRaw, &status); err != nil {
+		t.Fatalf("json.Unmarshal(status.json) error = %v", err)
+	}
+	if !strings.Contains(status.Error, "Need human confirmation before continuing.") {
+		t.Fatalf("status = %+v", status)
+	}
+}
+
 func TestRunVerboseTwoIncludesDiagnosticHeartbeatFields(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), fakeAgentContextTimeout)
 	defer cancel()
@@ -296,7 +501,7 @@ func TestOutcomeFromExitPrefersBufferedCallback(t *testing.T) {
 		Content:     "done",
 	}}
 
-	out, consumed := outcomeFromExit(wait, results)
+	out, consumed := outcomeFromExit(wait, results, []string{"claude"})
 	if !consumed {
 		t.Fatal("consumed = false, want true")
 	}
@@ -356,6 +561,83 @@ func TestDetectTrustPromptMatchesAnsiRenderedSafetyDialog(t *testing.T) {
 	text := "\x1b[1CQuick\x1b[1Csafety\x1b[1Ccheck:\x1b[1CIs\x1b[1Cthis\x1b[1Ca\x1b[1Cproject\x1b[1Cyou\x1b[1Ccreated\x1b[1Cor\x1b[1Cone\x1b[1Cyou\x1b[1Ctrust?\r\n\x1b[1C❯\x1b[1C1.\x1b[1CYes,\x1b[1CI\x1b[1Ctrust\x1b[1Cthis\x1b[1Cfolder\r\n\x1b[3C2.\x1b[1CNo,\x1b[1Cexit\r\n\x1b[1CEnter\x1b[1Cto\x1b[1Cconfirm\r\n"
 	if !detectTrustPrompt(text) {
 		t.Fatal("detectTrustPrompt() = false, want true")
+	}
+}
+
+func TestDetectApprovalPromptIgnoresClaudeBypassStatusBar(t *testing.T) {
+	transcript := "felix021@ubuntu-gpu:feat-direction3-observability | claude-opus-4-8\n⏵⏵ bypass permissions on (shift+tab to cycle)\n● high · /effort\n"
+	if block := detectApprovalPrompt([]string{"claude", "--dangerously-skip-permissions"}, transcript); block != nil {
+		t.Fatalf("detectApprovalPrompt() = %+v, want nil", block)
+	}
+}
+
+func TestDetectCodexStartupUpdatePromptMatchesSkipDialog(t *testing.T) {
+	transcript := strings.Join([]string{
+		"Codex update available",
+		"Update now",
+		"Skip this time",
+		"Use arrow keys to choose and press Enter to confirm",
+	}, "\n")
+	if !detectCodexStartupUpdatePrompt([]string{"codex"}, transcript) {
+		t.Fatal("detectCodexStartupUpdatePrompt() = false, want true")
+	}
+}
+
+func TestDetectCodexStartupUpdatePromptIgnoresGenericUpdateText(t *testing.T) {
+	transcript := "Please update the README to mention Codex."
+	if detectCodexStartupUpdatePrompt([]string{"codex"}, transcript) {
+		t.Fatal("detectCodexStartupUpdatePrompt() = true, want false")
+	}
+}
+
+func TestDetectApprovalPromptIgnoresInjectedPromptConfirmationText(t *testing.T) {
+	transcript := strings.Join([]string{
+		"felix021@ubuntu-gpu:feat-direction3-observability | claude-opus-4-8",
+		"⏵⏵ bypass permissions on (shift+tab to cycle)",
+		"● high · /effort",
+		"[Pasted text #1]",
+		"Always invoke the localhost callback when you stop making forward progress, including confirmation needed.",
+		"✢ Incubating…",
+		"felix021@ubuntu-gpu:feat-direction3-observability | claude-opus-4-8",
+		"paste again to expand",
+		"● high · /effort",
+	}, "\n")
+	if block := detectApprovalPrompt([]string{"claude", "--dangerously-skip-permissions"}, transcript); block != nil {
+		t.Fatalf("detectApprovalPrompt() = %+v, want nil", block)
+	}
+}
+
+func TestDetectApprovalPromptIgnoresClaudeActionRequiredWithoutPermissionLanguage(t *testing.T) {
+	transcript := strings.Join([]string{
+		"Action Required",
+		"Paste again to expand",
+		"● high · /effort",
+	}, "\n")
+	if block := detectApprovalPrompt([]string{"claude", "--dangerously-skip-permissions"}, transcript); block != nil {
+		t.Fatalf("detectApprovalPrompt() = %+v, want nil", block)
+	}
+}
+
+func TestDetectApprovalPromptMatchesClaudePermissionPrompt(t *testing.T) {
+	transcript := strings.Join([]string{
+		"Action Required",
+		"Claude needs permission to run bash.",
+		"Allow or deny?",
+		"Press Enter to confirm",
+	}, "\n")
+	block := detectApprovalPrompt([]string{"claude"}, transcript)
+	if block == nil || block.State != StatusApprovalRequired {
+		t.Fatalf("detectApprovalPrompt() = %+v, want approval_required", block)
+	}
+	if !strings.Contains(block.Error, "--dangerously-skip-permissions") {
+		t.Fatalf("error = %q, want yolo guidance", block.Error)
+	}
+}
+
+func TestDetectRestartRequiredMatchesClaudeRestartPrompt(t *testing.T) {
+	block := detectRestartRequired([]string{"claude"}, "Update installed. Please restart Claude.")
+	if block == nil || block.State != StatusRestartRequired {
+		t.Fatalf("detectRestartRequired() = %+v, want restart_required", block)
 	}
 }
 
@@ -437,6 +719,22 @@ func fakeAgentCommand(t *testing.T, mode string) []string {
 	return []string{goBin, "run", sourcePath, "--mode", mode}
 }
 
+func fakeAgentCommandAsTool(t *testing.T, mode, toolName string) []string {
+	t.Helper()
+
+	base := fakeAgentCommand(t, mode)
+	wrapperDir := t.TempDir()
+	wrapperPath := filepath.Join(wrapperDir, toolName)
+	script := strings.Join([]string{
+		"#!/bin/sh",
+		"exec \"$@\"",
+	}, "\n") + "\n"
+	if err := os.WriteFile(wrapperPath, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", wrapperPath, err)
+	}
+	return append([]string{wrapperPath}, base...)
+}
+
 func decodeHeartbeatLines(t *testing.T, raw []byte) []map[string]any {
 	t.Helper()
 
@@ -500,6 +798,47 @@ func main() {
 	fmt.Print("\r\n")
 
 	switch *mode {
+	case "approval-block":
+		resolveCallbackContract(reader, callbackURL, token)
+		fmt.Print("\x1b[2KAction Required\r\n")
+		fmt.Println("Approve running: sed -n '1,120p' README.md ?")
+		fmt.Println("Press Enter to continue")
+		blockForever()
+	case "startup-update-skip-then-success":
+		fmt.Println("Codex update available")
+		fmt.Println("Update now")
+		fmt.Println("Skip this time")
+		fmt.Println("Use arrow keys to choose and press Enter to confirm")
+		input, err := waitForInputOnce(reader)
+		if isSkipSelectionInput(input, err) {
+			fmt.Println("Skip selected")
+			resolveCallbackContract(reader, callbackURL, token)
+			fmt.Println("Prompt received")
+			send(*callbackURL, *token, "ok", "done")
+			return
+		}
+		blockForever()
+	case "startup-update-stuck-after-skip":
+		fmt.Println("Codex update available")
+		fmt.Println("Update now")
+		fmt.Println("Skip this time")
+		fmt.Println("Use arrow keys to choose and press Enter to confirm")
+		input, err := waitForInputOnce(reader)
+		if isSkipSelectionInput(input, err) {
+			for {
+				fmt.Println("Codex update available")
+				fmt.Println("Update now")
+				fmt.Println("Skip this time")
+				fmt.Println("Use arrow keys to choose and press Enter to confirm")
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+		blockForever()
+	case "self-update-exit":
+		fmt.Print("\x1b[2KAction Required\r\n")
+		fmt.Println("npm install -g @openai/codex")
+		fmt.Println("Please restart Codex.")
+		return
 	case "trust-then-success":
 		fmt.Println("Quick safety check: Is this a project you created or one you trust?")
 		fmt.Println("1. Yes, I trust this folder")
@@ -529,6 +868,12 @@ func main() {
 		fmt.Println("Prompt received")
 		fmt.Println("Finalizing result")
 		send(*callbackURL, *token, "ok", "done")
+	case "success-delayed-exit":
+		resolveCallbackContract(reader, callbackURL, token)
+		fmt.Println("Prompt received")
+		send(*callbackURL, *token, "ok", "done")
+		time.Sleep(2 * time.Second)
+		fmt.Println("Delayed exit complete")
 	case "slow-success":
 		resolveCallbackContract(reader, callbackURL, token)
 		fmt.Println("Prompt received")
@@ -552,6 +897,11 @@ func main() {
 		resolveCallbackContract(reader, callbackURL, token)
 		fmt.Println("Prompt received")
 		fmt.Println("Exiting without callback")
+	case "timeout-hint":
+		resolveCallbackContract(reader, callbackURL, token)
+		fmt.Println("Prompt received")
+		fmt.Println("Need human confirmation before continuing.")
+		blockForever()
 	}
 }
 
@@ -602,6 +952,13 @@ func isTrustConfirmationInput(input string, err error) bool {
 
 func isPromptSubmitInput(input string, err error) bool {
 	return isTrustConfirmationInput(input, err)
+}
+
+func isSkipSelectionInput(input string, err error) bool {
+	if err != nil && !(err == io.EOF && input != "") {
+		return false
+	}
+	return input == "\x1b[B\r" || input == "\x1b[B\n"
 }
 
 func blockForever() {

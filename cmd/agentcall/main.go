@@ -52,7 +52,7 @@ func (f *intFlag) Set(value string) error {
 func parseRunArgs(args []string, stderr io.Writer) (runner.RunInput, error) {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	timeout := fs.String("timeout", "90s", "")
+	timeout := fs.String("timeout", "600s", "")
 	artifactsDir := fs.String("artifacts-dir", "", "")
 	statusFile := fs.String("status-file", "", "")
 	autoTrust := fs.Bool("auto-trust", false, "")

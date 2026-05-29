@@ -36,12 +36,15 @@ var randomTokenRead = rand.Read
 
 func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, error) {
 	const (
-		controlTickPeriod    = 200 * time.Millisecond
-		promptIdleAfter      = 350 * time.Millisecond
-		promptFallbackAfter  = 1500 * time.Millisecond
-		postTrustDelay       = 500 * time.Millisecond
-		promptSubmitFallback = 1500 * time.Millisecond
-		enterKey             = "\r"
+		controlTickPeriod      = 200 * time.Millisecond
+		promptIdleAfter        = 350 * time.Millisecond
+		promptFallbackAfter    = 1500 * time.Millisecond
+		postTrustDelay         = 500 * time.Millisecond
+		postUpdateSkipDelay    = 500 * time.Millisecond
+		updatePromptClearAfter = 1500 * time.Millisecond
+		promptSubmitFallback   = 1500 * time.Millisecond
+		enterKey               = "\r"
+		arrowDownEnterKey      = "\x1b[B\r"
 	)
 
 	opts, err := resolveRunOptions(in)
@@ -97,6 +100,8 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 	startedAt := time.Now()
 	promptReadyAt := startedAt
 	autoTrustSent := false
+	autoUpdateSkipSent := false
+	autoUpdateSkipAt := time.Time{}
 	promptPasted := false
 	promptSubmitted := false
 	promptPastedAt := time.Time{}
@@ -110,17 +115,17 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 		select {
 		case got := <-srv.Results():
 			cancel()
-			drainWait(waitCh, store, 500*time.Millisecond)
+			transcript := drainWait(waitCh, store, 500*time.Millisecond)
 
 			out := callbackEnvelope(got)
-			_ = store.WriteStatus(out)
+			finalizeArtifacts(store, out, transcript)
 			return out, nil
 
 		case wait := <-waitCh:
 			_ = store.AppendTranscript([]byte(wait.result.Transcript))
 
-			if out, ok := outcomeFromExit(wait, srv.Results()); ok {
-				_ = store.WriteStatus(out)
+			if out, ok := outcomeFromExit(wait, srv.Results(), opts.Command); ok {
+				finalizeArtifacts(store, out, wait.result.Transcript)
 				return out, nil
 			}
 
@@ -129,23 +134,27 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 				State:    StatusExited,
 				Status:   StatusCallbackMissing,
 				ExitCode: ExitCodeForStatus(CallbackStatusMissing),
-				Error:    "process exited before valid callback",
+				Error:    callbackMissingError(wait.result.Transcript),
 			}
-			_ = store.WriteStatus(out)
+			finalizeArtifacts(store, out, wait.result.Transcript)
 			return out, nil
 
 		case <-timer.C:
 			cancel()
-			drainWait(waitCh, store, 500*time.Millisecond)
+			transcript := drainWait(waitCh, store, 500*time.Millisecond)
+			if transcript == "" {
+				transcript = sess.Snapshot()
+				_ = store.AppendTranscript([]byte(transcript))
+			}
 
 			out := ResultEnvelope{
 				RunID:    "latest",
 				State:    StatusTimedOut,
 				Status:   StatusTimedOut,
 				ExitCode: ExitCodeForStatus(CallbackStatusTimedOut),
-				Error:    "runner timeout exceeded",
+				Error:    timeoutError(transcript),
 			}
-			_ = store.WriteStatus(out)
+			finalizeArtifacts(store, out, transcript)
 			return out, nil
 
 		case <-heartbeatCh:
@@ -197,6 +206,56 @@ func Run(ctx context.Context, in RunInput, stderr io.Writer) (ResultEnvelope, er
 				promptReadyAt = now.Add(postTrustDelay)
 				_ = store.AppendTranscript([]byte(autoTrustMarker))
 				continue
+			}
+
+			if !autoUpdateSkipSent && detectCodexStartupUpdatePrompt(opts.Command, snapshot) {
+				if err := sess.SendInput(arrowDownEnterKey); err != nil {
+					continue
+				}
+				autoUpdateSkipSent = true
+				autoUpdateSkipAt = now
+				promptReadyAt = now.Add(postUpdateSkipDelay)
+				_ = store.AppendTranscript([]byte(autoUpdateSkipMarker))
+				continue
+			}
+
+			if autoUpdateSkipSent && detectCodexStartupUpdatePrompt(opts.Command, snapshot) {
+				if now.Sub(autoUpdateSkipAt) < updatePromptClearAfter {
+					continue
+				}
+				cancel()
+				transcript := drainWait(waitCh, store, 500*time.Millisecond)
+				if transcript == "" {
+					transcript = snapshot
+					_ = store.AppendTranscript([]byte(transcript))
+				}
+				out := ResultEnvelope{
+					RunID:    "latest",
+					State:    StatusStartupBlocked,
+					Status:   string(CallbackStatusError),
+					ExitCode: ExitCodeForStatus(CallbackStatusError),
+					Error:    "Codex update prompt remained visible after auto-skip" + formatTranscriptHint(transcriptHint(transcript, 3)),
+				}
+				finalizeArtifacts(store, out, transcript)
+				return out, nil
+			}
+
+			if block := detectApprovalPrompt(opts.Command, snapshot); block != nil {
+				cancel()
+				transcript := drainWait(waitCh, store, 500*time.Millisecond)
+				if transcript == "" {
+					transcript = snapshot
+					_ = store.AppendTranscript([]byte(transcript))
+				}
+				out := ResultEnvelope{
+					RunID:    "latest",
+					State:    block.State,
+					Status:   string(CallbackStatusError),
+					ExitCode: ExitCodeForStatus(CallbackStatusError),
+					Error:    block.Error,
+				}
+				finalizeArtifacts(store, out, transcript)
+				return out, nil
 			}
 
 			if promptPasted && !promptSubmitted {
@@ -266,14 +325,16 @@ func buildCommand(command []string) []string {
 	return argv
 }
 
-func drainWait(waitCh <-chan sessionWait, store *state.Store, timeout time.Duration) {
+func drainWait(waitCh <-chan sessionWait, store *state.Store, timeout time.Duration) string {
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 
 	select {
 	case wait := <-waitCh:
 		_ = store.AppendTranscript([]byte(wait.result.Transcript))
+		return wait.result.Transcript
 	case <-timer.C:
+		return ""
 	}
 }
 
@@ -304,13 +365,41 @@ func refreshRunnerState(
 	return detector.State(now), updatedSnapshot, updatedPromptActivitySeen, updatedScreenChanged
 }
 
-func outcomeFromExit(_ sessionWait, results <-chan callback.Result) (ResultEnvelope, bool) {
+func outcomeFromExit(wait sessionWait, results <-chan callback.Result, command []string) (ResultEnvelope, bool) {
 	select {
 	case got := <-results:
 		return callbackEnvelope(got), true
 	default:
+		if restart := detectRestartRequired(command, wait.result.Transcript); restart != nil {
+			return ResultEnvelope{
+				RunID:    "latest",
+				State:    restart.State,
+				Status:   string(CallbackStatusError),
+				ExitCode: ExitCodeForStatus(CallbackStatusError),
+				Error:    restart.Error,
+			}, true
+		}
 		return ResultEnvelope{}, false
 	}
+}
+
+func finalizeArtifacts(store *state.Store, out ResultEnvelope, transcript string) {
+	_ = store.WriteCleanTranscript(cleanTranscriptText(transcript))
+	_ = store.WriteStatus(out)
+}
+
+func timeoutError(transcript string) string {
+	if hint := transcriptHint(transcript, 3); hint != "" {
+		return "runner timeout exceeded: " + hint
+	}
+	return "runner timeout exceeded"
+}
+
+func callbackMissingError(transcript string) string {
+	if hint := transcriptHint(transcript, 3); hint != "" {
+		return "process exited before valid callback: " + hint
+	}
+	return "process exited before valid callback"
 }
 
 func randomToken() (string, error) {
